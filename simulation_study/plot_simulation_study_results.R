@@ -20,9 +20,9 @@ n.beta <- 5
 cols <- rev(viridis(n.beta))
 
 
-data <- readRDS('/Users/wdaniels/Documents/papers/MDLQ/output_data/forward_model_output_ADED2024.RData')
+data <- readRDS('../input_data/forward_model_output_ADED2024.RData')
 
-leak.data <- readRDS('/Users/wdaniels/Documents/papers/MDLQ/input_data/leak_data_clean.RData')
+leak.data <- readRDS('../input_data/leak_data.RData')
 leak.data[is.na(leak.data)] <- 0
 leak.data <- leak.data[,c(1,2,3,4,6,7,5)]
 
