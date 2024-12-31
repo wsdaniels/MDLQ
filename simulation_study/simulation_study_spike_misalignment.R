@@ -19,7 +19,7 @@ library(zoo)
 
 num.cores.to.use <- 4
 
-forward.model.path         <- '../output_data/forward_model_output_ADED2024.RData'
+forward.model.path         <- '../input_data/forward_model_output_ADED2024.RData'
 output.file.path           <- '../output_data/simulation_study_output_spike_misalignment.RData'
 spike.detection.alg.path   <- 'https://raw.github.com/wsdaniels/DLQ/master/code/HELPER_spike_detection_algorithm.R'
 spike.slab.regression.path <- '../code/HELPER_spike_slab_regression.R'

@@ -33,7 +33,7 @@ num.cores.to.use <- 6
 run.mode <- 'event.detection'
 
 # Path to output from atmospheric dispersion model
-forward.model.path <- '../output_data/forward_model_output_ADED2024.RData'
+forward.model.path <- '../input_data/forward_model_output_ADED2024.RData'
 
 # Location to save MDLQ output
 output.file.path <- '../output_data/MDLQ_output_ADED2024.RData'
