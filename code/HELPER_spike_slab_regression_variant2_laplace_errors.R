@@ -1,13 +1,3 @@
-# a.vec = rep(1, ncol(X))
-# b.vec = rep(1, ncol(X))
-# c.vec = rep(1, ncol(X))
-# d.vec = rep(1, ncol(X))
-# alpha1 = 1
-# alpha2 = 1
-# p = 0.001
-# n.samples = 50000
-# # n.burn.in = round(n.samples / 4, 0)
-# n.burn.in <- 10000
 
 ss.regress <- function(y, X,
                        a.vec = rep(1, ncol(X)), b.vec = rep(1, ncol(X)), # Hyper priors for theta_i's
@@ -17,11 +7,6 @@ ss.regress <- function(y, X,
                        n.samples, n.burn.in = round(n.samples / 4, 0),
                        plot.trace = F) {
   
-  
-  
-  # library(matrixcalc)
-  # library(tmvtnorm)
-  # library(MASS)
   
   k <- ncol(X)
   n <- nrow(X)
@@ -62,7 +47,6 @@ ss.regress <- function(y, X,
     b.prev <- res[i-1, ncol(res)]
     
     
-    
     ## Start sampling from the conditional posterior distributions
     ##############################################################
     
@@ -72,15 +56,12 @@ ss.regress <- function(y, X,
       theta.new[j] <- rbeta(1, a.vec[j] + pi.prev[j], 1 - pi.prev[j] + b.vec[j])
     }
     
-    
-    
     b.target <- function(b){
       part1 <- n*log(1/(2*b)) + (alpha1+1) * log(1/b) 
       part2 <- -sum( abs( y - X %*% beta.prev ) ) / b
       part3 <- -alpha2 / b
       return(part1 + part2 + part3)
     }
-    
     
     counter <- 1
     while(T){
@@ -105,9 +86,6 @@ ss.regress <- function(y, X,
     }
     
     
-    
-    
-    
     for (j in sample(seq(k))){
       
       if (pi.prev[j] == 1){
@@ -129,7 +107,6 @@ ss.regress <- function(y, X,
           part4 <- -d.vec[j]/s.vec[j]
           return(part1 + part2 + part3 + part4)
         }
-        
       }
       
       counter <- 1
@@ -154,16 +131,11 @@ ss.regress <- function(y, X,
         s.prev[j] <- s.prev[j]
         # accepted[i, 5+j] <- F
       }
-      
     }
     
     s.new <- s.prev
     
-    
-    
-    
     for (j in sample(seq(k))){
-      
       
       if (pi.prev[j] == 1){
         
@@ -184,7 +156,6 @@ ss.regress <- function(y, X,
           part4 <- -beta.vec[j] / p
           return(part1 + part2 + part3 + part4)
         }
-        
       }
       
       counter <- 1
@@ -209,17 +180,11 @@ ss.regress <- function(y, X,
         beta.prev[j] <- beta.prev[j]
         # accepted[i, 15+j] <- F
       }
-      
-      
     }
     
     beta.new <- beta.prev
     
-    
-    # print("success")
-    
     for (j in sample(seq(k))) {
-      
       
       pi.target <- function(pi.vec){
         
@@ -237,7 +202,6 @@ ss.regress <- function(y, X,
       proposed.pi.vec <- pi.prev
       proposed.pi.vec[j] <- proposed.pi
       
-      
       accept.prob <- pi.target(proposed.pi.vec) / pi.target(pi.prev)
       
       if(runif(1) <= accept.prob) {
@@ -247,13 +211,9 @@ ss.regress <- function(y, X,
         pi.prev[j] <- pi.prev[j]
         # accepted[i, j] <- F
       }
-      
     }
     
     pi.new <- pi.prev
-    
-    
-    
     
     res[i, ] <- c(pi.new, s.new, theta.new, beta.new, b.new)
     
@@ -265,8 +225,6 @@ ss.regress <- function(y, X,
   
   if (F){
     
-    # png(save.dir, res = 100, pointsize = 24, width = 1920, height = 1080)
-    # 
     par(mfrow = c(ceiling(ncol(out) / floor(ncol(out)/3)),
                   floor(ncol(out)/3)))
     par(mar = c(2,2,2,2))
@@ -274,16 +232,6 @@ ss.regress <- function(y, X,
     for (i in 1:ncol(out)){
       plot(out[,i], type = "l", main = colnames(out)[i])
     }
-    # 
-    # dev.off()
-    
-    # png(paste0('/Users/wdaniels/Desktop/', sample.int(1000, 1), ".png"),
-    #     res = 100, pointsize = 24, width = 1920, height = 1080)
-    # par(mfrow = c(1,2))
-    # accepted <- accepted[-seq(n.burn.in)]
-    # plot(out$sigma, type = "l", main = round(sum(accepted) / length(accepted), 3))
-    # hist(out$sigma)
-    # dev.off()
     
     par(mfrow = c(1,1))
   }
