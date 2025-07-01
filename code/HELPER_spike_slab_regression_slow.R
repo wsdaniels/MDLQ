@@ -1,47 +1,4 @@
 
-inv.transform <- function(sim.order, p, beta.mean, beta.chol, j){
-  # print(paste0( i, "/", n.samples, " - sim order: ", sim.order))
-  num.samples <- round(ifelse(25^log(sim.order) < 500, 500, 25^log(sim.order)))
-  these.betas <- vector(length= num.samples)
-  for (o in 1:length(these.betas)){
-    u <- runif(p, min = 1-10^(-sim.order), max = 1)
-    Z <- qnorm(u)
-    these.betas[o] <- (beta.mean + beta.chol %*% Z)[j]
-  }
-  these.betas[is.infinite(these.betas)] <- NA
-  # hist(these.betas, xlim = c(-0.1, 0.01))
-  # hist(these.betas, xlim = c(-0.06,0.01), breaks = seq(-0.06, 0.02, by = 0.01/2))
-  # hist(these.betas, xlim = c(-0.06,0.01), breaks = seq(-0.06, 0.02, by = 0.01/2), col = alpha("green", 0.1), add = T)
-  this.beta <- NA
-  if (any(these.betas > 0, na.rm = T)){
-    this.beta <- these.betas[these.betas > 0 & !is.na(these.betas)][1]
-    return(this.beta)
-  } else {
-    return(NA)
-  }
-  
-}
-
-mills.approx <- function(b, p, beta.mean, beta.chol, j){
-  # print(paste0( i, "/", n.samples, " - b value: ", b))
-  num.samples <- 500
-  these.betas <- vector(length= num.samples)
-  for (o in 1:length(these.betas)){
-    U <- runif(p)
-    Z <- sqrt(b^2 - 2 * log(U/b))
-    these.betas[o] <- (beta.mean + beta.chol %*% Z)[j]
-  }
-  
-  if (any(these.betas > 0)){
-    this.beta <- these.betas[these.betas > 0][1]
-    return(list(this.beta, mean(these.betas)))
-  } else {
-    return(list(NA, mean(these.betas)))
-  }
-  
-}
-
-
 ss.regress <- function(y, X, 
                        a.vec = rep(1, ncol(X)), b.vec = rep(1, ncol(X)), # Hyper priors for theta_i's
                        c.vec = rep(1, ncol(X)), d.vec = rep(1, ncol(X)), # Hyper priors for tau2_i's
@@ -206,95 +163,45 @@ ss.regress <- function(y, X,
       beta.mean <- beta.cov %*% ((XtRy/sigma2.new) - matrix(e/(tau2.new * sigma2.new), nrow = p))
       
       found.beta <- F
-      
-      # Check the first inv transform
-      this.beta <- inv.transform(sim.order = 0, p, beta.mean, beta.chol, j)
-      if (!is.na(this.beta)){ found.beta <- T }
-      
-      # If first inv transform didn't work, do other stuff
+      for (sim.order in seq(0,14, by = 0.2)){
+        print(paste0( i, "/", n.samples, " - sim order: ", sim.order))
+        num.samples <- round(ifelse(30^log(sim.order) < 500, 500, 30^log(sim.order)))
+        these.betas <- vector(length= num.samples)
+        for (o in 1:length(these.betas)){
+          u <- runif(p, min = 1-10^(-sim.order), max = 1)
+          Z <- qnorm(u)
+          these.betas[o] <- (beta.mean + beta.chol %*% Z)[j]
+        }
+        these.betas[is.infinite(these.betas)] <- NA
+        if (any(these.betas > 0, na.rm = T)){
+          this.beta <- these.betas[these.betas > 0 & !is.na(these.betas)][1]
+          found.beta <- T
+          break
+        }
+      }
       if (!found.beta){
         
-        # First check the last inv transform
-        this.beta <- inv.transform(sim.order = 10, p, beta.mean, beta.chol, j)
-        if (!is.na(this.beta)){ found.beta <- T }
-        
-        # If the last inv transform found something, check the intermediate inv transforms
-        if (found.beta){
-          for (repeater in 1:10){
-            for (sim.order in seq(0,10, by = 0.2)){
-              this.beta <- inv.transform(sim.order, p, beta.mean, beta.chol, j)
-              if (!is.na(this.beta)){ break }
-            }
-            if (!is.na(this.beta)){ break }
+        for (b in seq(1, 2000, by = 0.2)){
+          print(paste0( i, "/", n.samples, " - b value: ", b))
+          num.samples <- 3000
+          these.betas <- vector(length= num.samples)
+          for (o in 1:length(these.betas)){
+            U <- runif(p)
+            Z <- sqrt(b^2 - 2 * log(U/b))
+            these.betas[o] <- (beta.mean + beta.chol %*% Z)[j]
           }
-          if (!is.na(this.beta)){
-            beta.new[j] <- this.beta  
-          } else {
-            found.beta <- F
+          if (any(these.betas > 0)){
+            this.beta <- these.betas[these.betas > 0][1]
+            found.beta <- T
+            break
           }
         }
-        
-        # If the last inv transform didn't find anything, move onto the mills approx
-        if (!found.beta){
-          b.seq <- seq(1, 10000, by = 100)
-          avg.betas <- vector(length = length(b.seq))
-          count <- 1
-          for (b in b.seq){
-            tmp <- mills.approx(b, p, beta.mean, beta.chol, j)
-            this.beta <- tmp[[1]]
-            avg.betas[count] <- tmp[[2]]
-            count <- count + 1
-            if (!is.na(this.beta)){ 
-              found.beta <- T
-              break 
-            }
-          }
-          
-          # If the mills approx found something, zoom in the b grid
-          if (found.beta){
-            
-            if (b == 1){
-              b.seq.zoom <- seq(1,100, by = 1)
-            } else {
-              # NOTE: the extra plus 2 is for when a beta was found at the very upper
-              # end of the range. A resample from that range might not find it again,
-              # so extend the range slightly so that a beta can still be found
-              b.seq.zoom <- seq(b.seq[count-2], b.seq[count-1+2], by = 1)
-            }
-            
-            avg.betas <- vector(length = length(b.seq.zoom))
-            for (b in b.seq.zoom){
-              tmp <- mills.approx(b, p, beta.mean, beta.chol, j)
-              this.beta <- tmp[[1]]
-              if (!is.na(this.beta)){ 
-                break 
-              }
-            }
-            
-            beta.new[j] <- this.beta  
-            
-            # If the mills approx didnt' find something, diagnose why not
-          } else {
-            
-            this.fit <- lm(avg.betas ~ b.seq)
-            if (coef(this.fit)[2] < 0){
-              print('decreasing betas')
-              return('decreasing betas')
-            } else {
-              print('b did not go high enough')
-              return('b did not go high enough')
-            }
-            
-          } # End check if the mills approx found something
-        } # End check if the last inv transform found something
-        
-        # If first inv transform worked, save beta
-      } else {
-        beta.new[j] <- this.beta  
       }
-      
-    } # end loop through the betas
-    
+      if (!found.beta){
+        return('broke on betas')
+      }
+      beta.new[j] <- this.beta
+    }
     
     
     # sample each pi_j in random order

@@ -1,10 +1,3 @@
-# a.vec = rep(1, ncol(X))
-# b.vec = rep(1, ncol(X))
-# c.vec = rep(1, ncol(X))
-# d.vec = rep(1, ncol(X))
-# k = l = 1
-# n.samples = 1500
-# n.burn.in = round(n.samples / 4, 0)
 
 ss.regress <- function(y, X, 
                        a.vec = rep(1, ncol(X)), b.vec = rep(1, ncol(X)), # Hyper priors for theta_i's
@@ -44,8 +37,6 @@ ss.regress <- function(y, X,
   # we start running the Gibbs sampler
   for (i in seq(2, n.samples)) {
     
-    # print(paste0( i, "/", n.samples))
-    
     # first, get all the values of the previous time point
     pi.prev <- res[i-1, seq(1, p)]
     tau2.prev <- res[i-1,seq(p + 1, 2*p)]
@@ -63,15 +54,6 @@ ss.regress <- function(y, X,
     for (j in sample(seq(p))){
       theta.new[j] <- rbeta(1, a.vec[j] + pi.prev[j], 1 - pi.prev[j] + b.vec[j])
     }
-    
-    #R.coef <- 1 / (1-r.prev^2)
-    #R.mat <- matrix(0, nrow = n, ncol = n)
-    #diag(R.mat) <- 1 + r.prev^2
-    #R.mat[1,1] <- R.mat[n,n] <- 1
-    #R.mat[row(R.mat) == (col(R.mat)-1)] <- -r.prev
-    #R.mat[row(R.mat) == (col(R.mat)+1)] <- -r.prev
-    
-    #R.inv <- R.coef * R.mat
     
     R.inv <- diag(n)
     
@@ -114,48 +96,7 @@ ss.regress <- function(y, X,
     }
     
     
-    #R <- qr.solve(R.inv)
-    
-    # r.target <- function(r){
-    #   
-    #   R.coef <- 1 / (1-r^2)
-    #   R.mat <- matrix(0, nrow = n, ncol = n)
-    #   diag(R.mat) <- 1 + r^2
-    #   R.mat[1,1] <- R.mat[n,n] <- 1
-    #   R.mat[row(R.mat) == (col(R.mat)-1)] <- -r
-    #   R.mat[row(R.mat) == (col(R.mat)+1)] <- -r
-    #   
-    #   R.inv <- R.coef * R.mat
-    #   
-    #   part1 <- log( (1-r^2)^(-(n-1)/2) )
-    #   part2 <- (-1/(2*sigma2.new)) * t(err) %*% R.inv %*% err
-    #   
-    #   return(part1 + part2)
-    # }
-    # 
-    # counter <- 1
-    # while(T){
-    #   proposed.r <- rnorm(1, mean = r.prev, sd = 0.2)
-    #   counter <- counter + 1
-    #   if (proposed.r > 0 & proposed.r <= 0.97){ break }
-    #   if (counter > 10000){
-    #     print("broke on r")
-    #     return(NA)
-    #   }
-    # }
-    # 
-    # accept.prob <- exp(r.target(proposed.r) - r.target(r.prev))
-    # 
-    # if(runif(1) <= accept.prob) {
-    #   r.new <- proposed.r
-    #   accepted[i] <- T
-    # } else {
-    #   r.new <- r.prev
-    #   accepted[i] <- F
-    # }
-    
     r.new <- 0
-    
     
     # sample tau2 from an Inverse Gamma
     tau2.new <- vector(length = p)
@@ -168,23 +109,9 @@ ss.regress <- function(y, X,
     XtRX <- t(X) %*% R.inv %*% X
     XtRy <- t(X) %*% R.inv %*% y
     
-    
-    # sample beta from multivariate Gaussian
-    # if(all(is.na(
-    #   tryCatch({ forceSymmetric(qr.solve( (1/sigma2.new) * XtRX )) },
-    #            error = function(msg){ return(NA) })
-    # ))){
-    #   print("broke on beta cov")
-    #   return(NA)
-    # } else {
-    #   beta.cov <- forceSymmetric(qr.solve( (1/sigma2.new) * XtRX ))
-    # }
-    
     beta.cov <- qr.solve( (1/sigma2.new) * XtRX )
-    
+    beta.chol <- chol(beta.cov)
     beta.new <- vector(length = p)
-    
-    
     
     for (j in sample(seq(p))){
       e <- rep(0, p)
@@ -192,20 +119,49 @@ ss.regress <- function(y, X,
       
       beta.mean <- beta.cov %*% ((XtRy/sigma2.new) - matrix(e/(tau2.new * sigma2.new), nrow = p))
       
-      
-      counter <- 1
-      while(T){
-        this.beta <- mvrnorm(n = 1, mu = as.numeric(beta.mean), Sigma = beta.cov)[j]
-        counter <- counter + 1
-        if (this.beta >= 0) {break}
-        if (counter > 10000) {
-          print("broke on betas")
-          return(NA)
+      found.beta <- F
+      for (sim.order in seq(0,14, by = 0.2)){
+        print(paste0( i, "/", n.samples, " - sim order: ", sim.order))
+        num.samples <- round(ifelse(30^log(sim.order) < 50, 50, 30^log(sim.order)))
+        # num.samples <- round(ifelse(30^log(sim.order) < 500, 500, 30^log(sim.order)))
+        these.betas <- vector(length= num.samples)
+        for (o in 1:length(these.betas)){
+          u <- runif(p, min = 1-10^(-sim.order), max = 1)
+          Z <- qnorm(u)
+          these.betas[o] <- (beta.mean + beta.chol %*% Z)[j]
+        }
+        these.betas[is.infinite(these.betas)] <- NA
+        if (any(these.betas > 0, na.rm = T)){
+          this.beta <- these.betas[these.betas > 0 & !is.na(these.betas)][1]
+          found.beta <- T
+          break
         }
       }
-      
+      if (!found.beta){
+        
+        for (b in seq(1, 1000, by = 0.2)){
+          print(paste0( i, "/", n.samples, " - b value: ", b))
+          # num.samples <- 3000
+          num.samples <- 1000
+          these.betas <- vector(length= num.samples)
+          for (o in 1:length(these.betas)){
+            U <- runif(p)
+            Z <- sqrt(b^2 - 2 * log(U/b))
+            these.betas[o] <- (beta.mean + beta.chol %*% Z)[j]
+          }
+          if (any(these.betas > 0)){
+            this.beta <- these.betas[these.betas > 0][1]
+            found.beta <- T
+            break
+          }
+        }
+      }
+      if (!found.beta){
+        return('broke on betas')
+      }
       beta.new[j] <- this.beta
     }
+    
     
     # sample each pi_j in random order
     for (j in sample(seq(p))) {
@@ -261,3 +217,5 @@ ss.regress <- function(y, X,
   # remove the first n.burnin number of samples
   return(out)
 }
+
+
