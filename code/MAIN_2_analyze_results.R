@@ -29,21 +29,21 @@ if (commandArgs()[1] == "RStudio"){
 interval.length <- 30
 
 # Amount of time [minutes] that the inversion windows are moved forward
-step.size <- 10
+step.size <- 30
 
 # Location of MDLQ output 
-data <- readRDS('../output_data/MDLQ_output_ADED2024_30min_fast.RData')
+data <- readRDS('../output_data/MDLQ_output_ADED2024_30min_interval_30min_step.RData')
 
 # Location of the METEC controlled release ground truth data
 leak.data <- readRDS('../input_data/leak_data.RData')
 
 # Generate ground truth data on 30-minute intervals (T), or read in a previously generated file (F)
 generate.truth <- F
-truth.location <- '../output_data/truth_ADED2024_30min.RData'
+truth.location <- '../output_data/truth_ADED2024_30min_interval_30min_step.RData'
 
 # Generate info mask on 30-minute intervals (T), or read in a previously generated file (F)
 generate.info.mask <- F
-info.mask.location <- '../output_data/info_mask_ADED2024_30min.RData'
+info.mask.location <- '../output_data/info_mask_ADED2024_30min_interval_30min_step.RData'
 
 # Path to the forward model output
 forward.model.path <- '../input_data/forward_model_output_ADED2024.RData'
@@ -179,11 +179,12 @@ leak.data.mat <- as.matrix(leak.data[,c(3:7)])
 if (generate.info.mask){
   for (i in 1:num.intervals){
     print(paste0(i, "/", num.intervals))
-    scale.factors <- q.hat[i, ]/3.6
+    # scale.factors <- q.hat[i, ]/3.6
     time.mask <- seq((i-1)*step.size + 1,
                      (i-1)*step.size + interval.length)
     for (j in 1:length(source.names)){
-      sims[[j]][time.mask, ] <- sims[[j]][time.mask, ] * scale.factors[j]
+      # sims[[j]][time.mask, ] <- sims[[j]][time.mask, ] * scale.factors[j]
+      sims[[j]][time.mask, ] <- sims[[j]][time.mask, ] 
     }
   }
   info.mask <- create.info.mask(times, sims)
@@ -204,7 +205,8 @@ for (j in 1:length(source.names)){
 }
 
 # Mask in only the 30-minute windows that have full information for all sources
-info.to.use <- apply(info, 1, function(X) all(X == 1))
+# info.to.use <- apply(info, 1, function(X) all(X == 1))
+info.to.use <- apply(info, 1, function(X) all(X > 0.95))
 
 
 
@@ -220,9 +222,9 @@ q.hat.upper.avg[1, ] <- q.hat.upper[1, ]
 if (interval.length > 10){
   for (i in 2:num.intervals){
     ind.to.avg <- seq(max(1, i-num.to.avg), i)
-    q.hat.avg[i, ] <- apply(q.hat[ind.to.avg, ], 2, mean, na.rm = T)
-    q.hat.lower.avg[i, ] <- apply(q.hat.lower[ind.to.avg, ], 2, mean, na.rm = T)
-    q.hat.upper.avg[i, ] <- apply(q.hat.upper[ind.to.avg, ], 2, mean, na.rm = T)
+    q.hat.avg[i, ] <- apply(matrix(q.hat[ind.to.avg, ], ncol = length(source.names)), 2, mean, na.rm = T)
+    q.hat.lower.avg[i, ] <- apply(matrix(q.hat.lower[ind.to.avg, ], ncol = length(source.names)), 2, mean, na.rm = T)
+    q.hat.upper.avg[i, ] <- apply(matrix(q.hat.upper[ind.to.avg, ], ncol = length(source.names)), 2, mean, na.rm = T)
   }
   
 } else {
@@ -276,14 +278,6 @@ if (generate.truth){
 } else {
   truth <- readRDS(truth.location)
 }
-
-############### REDO TRUTH AND DELETE THIS
-############### REDO TRUTH AND DELETE THIS
-############### REDO TRUTH AND DELETE THIS
-############### REDO TRUTH AND DELETE THIS
-############### REDO TRUTH AND DELETE THIS
-############### REDO TRUTH AND DELETE THIS
-truth <- truth[1:num.intervals, ]
 
 
 # STEP 6: COMPUTE SITE-LEVEL EMISSION RATE ESTIMATES AND COMPUTE CONVERAGES
@@ -344,7 +338,8 @@ for (i in 1:nrow(q.hat.cum)){
   q.hat.cum[i, ] <- cumsum(q.hat.avg[i, ])
 }
 
-this.mask <- 1040:1770
+# this.mask <- 1040:1770
+this.mask <- 347:592
 
 ylim.max <- 10
 
@@ -564,7 +559,7 @@ for (i in 1:ncol(q.hat)){
 }
 
 # Sum over the inversion windows
-inventory.samples <- t(apply(samples, c(2,3), sum))/2/1000
+inventory.samples <- t(apply(samples, c(2,3), sum))*step.size/60/1000
 
 equip.sum <- apply(inventory.samples, 2, mean)
 equip.sum.lower <- apply(inventory.samples, 2, function(X) quantile(X, probs = 0.025))
@@ -579,9 +574,9 @@ if (F){
   
   to.remove <- rep(F, length(q.hat.total))
   
-  q.hat.avg.outlier.removed <- q.hat.avg[!to.remove,]/2/1000
-  q.hat.lower.avg.outlier.removed <- q.hat.lower.avg[!to.remove,]/2/1000
-  q.hat.upper.avg.outlier.removed <- q.hat.upper.avg[!to.remove,]/2/1000
+  q.hat.avg.outlier.removed <- q.hat.avg[!to.remove,]*step.size/60/1000
+  q.hat.lower.avg.outlier.removed <- q.hat.lower.avg[!to.remove,]*step.size/60/1000
+  q.hat.upper.avg.outlier.removed <- q.hat.upper.avg[!to.remove,]*step.size/60/1000
   
   for (i in 1:length(source.names)){
     to.add.avg <- is.na(q.hat.avg.outlier.removed[,i])
@@ -604,7 +599,7 @@ if (F){
   
 }
 
-equip.sum.truth <- apply(truth, 2, sum)/2/1000
+equip.sum.truth <- apply(truth, 2, sum)*step.size/60/1000
 site.total.truth <- sum(equip.sum.truth)
 
 to.plot <- c(equip.sum, site.total)
@@ -637,14 +632,14 @@ total.error.abs <- to.plot - to.plot.truth
 total.error <- round(100* (to.plot - to.plot.truth) / to.plot.truth, 1)
 
 b <- barplot(to.plot[this.order], col = alpha(bar.cols[this.order], alpha.val), 
-             ylim = c(0,3*2500/1000),
+             ylim = c(0,3),
              border = NA, ylab = "Total emissions [metric tons]")
-
-segments(x0 = b, y0 = to.plot.lower[this.order], y1 = to.plot.upper[this.order], lwd = 2)
 
 adj.val <- 0.5
 segments(x0 = b-adj.val, x1 = b+adj.val, y0 = to.plot.truth[this.order],
          col = bar.cols[this.order], lwd = 6)
+
+segments(x0 = b, y0 = to.plot.lower[this.order], y1 = to.plot.upper[this.order], lwd = 2)
 
 legend("right", c("West Wellhead", "West Separator", "Tank", "East Wellhead", "East Separator", "Site Total")[this.order],
        fill = bar.cols[this.order], box.lwd = NA)
@@ -654,7 +649,7 @@ legend("topright", c("Truth (line)", "Estimate (box)"),
        box.col = "white", border = c("white", "black"))
 
 text(x = b-0.25,
-     y = -150*3/1000,
+     y = -0.2,
      labels = trimws(paste0(format(total.error[this.order], nsmall = 1), "%")),
      offset = 5,
      srt = 25,
@@ -668,12 +663,12 @@ hist(error, xlim = c(-6,6), breaks = seq(-999,999, by = 0.5), xaxt = "n",
      yaxt = "n",
      ylab = "Frequency [thousands]",
      xlab = "",
-     ylim= c(0,5000))
+     ylim= c(0,1500))
 axis(side = 1, at = seq(-6,6, by = 2))
 segments(x0 = mean(error, na.rm = T), y0 = -999, y1 = 99999, lwd = 4, col = line.col)
 segments(x0 = quantile(error, probs = c(0.025, 0.975), na.rm = T), 
          y0 = -999, y1 = 99999, lwd = 4, col = line.col, lty = 2)
-axis(side = 2, at = seq(0,5000, by = 1000), labels = seq(0,5, by = 1))
+axis(side = 2, at = seq(0,1500, by = 500), labels = seq(0,1.5, by = 0.5))
 
 
 
@@ -702,14 +697,14 @@ to.plot <- table(num.correct.vec)
 b <- barplot(to.plot,  yaxt = "n",
              col = alpha(mako(7)[1:6], 1),
              border = NA,
-             ylim = c(0,5000),
+             ylim = c(0,1500),
              main = round(mean(num.correct.vec, na.rm = T), 2),
              ylab = "Frequency [thousands]")
 
 axis(side = 1, at = b, labels = NA)
-axis(side = 2, at = seq(0,5000, by = 1000), labels = seq(0,5, by = 1))
+axis(side = 2, at = seq(0,1500, by = 500), labels = seq(0,1.5, by = 0.5))
 text(x = b,
-     y = to.plot+200,
+     y = to.plot+50,
      labels = paste0(round(100*percent, 1), "%"),
      offset = 5,
      xpd = NA)
@@ -818,7 +813,7 @@ for (i in 1:ncol(q.hat.tmp)){
   }
 }
 
-inventory.samples <- t(apply(samples, c(2,3), sum))/2/1000
+inventory.samples <- t(apply(samples, c(2,3), sum))*step.size/60/1000
 
 equip.sum <- apply(inventory.samples, 2, mean)
 equip.sum.lower <- apply(inventory.samples, 2, function(X) quantile(X, probs = 0.025))
@@ -827,9 +822,9 @@ equip.sum.upper <- apply(inventory.samples, 2, function(X) quantile(X, probs = 0
 # OLD VERSION THAT IS NOT BASED ON SAMPLING
 if (F){
   
-  q.hat.avg.outlier.removed <- q.hat.avg[!to.remove,]/2/1000
-  q.hat.lower.avg.outlier.removed <- q.hat.lower.avg[!to.remove,]/2/1000
-  q.hat.upper.avg.outlier.removed <- q.hat.upper.avg[!to.remove,]/2/1000
+  q.hat.avg.outlier.removed <- q.hat.avg[!to.remove,]*step.size/60/1000
+  q.hat.lower.avg.outlier.removed <- q.hat.lower.avg[!to.remove,]*step.size/60/1000
+  q.hat.upper.avg.outlier.removed <- q.hat.upper.avg[!to.remove,]*step.size/60/1000
   
   for (i in 1:length(source.names)){
     to.add.avg <- is.na(q.hat.avg.outlier.removed[,i])
@@ -855,7 +850,7 @@ site.total <- sum(equip.sum)
 site.total.lower <- sum(equip.sum.lower)
 site.total.upper <- sum(equip.sum.upper)
 
-equip.sum.truth <- apply(truth[!to.remove, ], 2, sum)/2/1000
+equip.sum.truth <- apply(truth[!to.remove, ], 2, sum)*step.size/60/1000
 site.total.truth <- sum(equip.sum.truth)
 
 to.plot <- c(equip.sum, site.total)
@@ -887,14 +882,14 @@ bar.cols <- c(wellhead.west.color,
 total.error <- round(100* (to.plot - to.plot.truth) / to.plot.truth, 1)
 
 b <- barplot(to.plot[this.order], col = alpha(bar.cols[this.order], alpha.val), 
-             ylim = c(0,0.6),
+             ylim = c(0,0.3),
              border = NA, ylab = "Total emissions [metric tons]")
-
-segments(x0 = b, y0 = to.plot.lower[this.order], y1 = to.plot.upper[this.order], lwd = 2)
 
 adj.val <- 0.5
 segments(x0 = b-adj.val, x1 = b+adj.val, y0 = to.plot.truth[this.order],
          col = bar.cols[this.order], lwd = 6)
+
+segments(x0 = b, y0 = to.plot.lower[this.order], y1 = to.plot.upper[this.order], lwd = 2)
 
 
 legend("right", c("West Wellhead", "West Separator", "Tank", "East Wellhead", "East Separator", "Site Total")[this.order],
@@ -905,7 +900,7 @@ legend("topright", c("Truth (line)", "Estimate (box)"),
        box.col = "white", border = c("white", "black"))
 
 text(x = b-0.25,
-     y = -20*2/1000,
+     y = -0.02,
      labels = trimws(paste0(format(total.error[this.order], nsmall = 1), "%")),
      offset = 5,
      srt = 25,
@@ -919,12 +914,12 @@ hist(error, xlim = c(-6,6), breaks = seq(-999,999, by = 0.5), xaxt = "n",
      yaxt = "n",
      ylab = "Frequency",
      xlab = "",
-     ylim= c(0,400))
+     ylim= c(0,200))
 axis(side = 1, at = seq(-6,6, by = 2))
 segments(x0 = mean(error, na.rm = T), y0 = -999, y1 = 99999, lwd = 4, col = line.col)
 segments(x0 = quantile(error, probs = c(0.025, 0.975), na.rm = T), 
          y0 = -999, y1 = 99999, lwd = 4, col = line.col, lty = 2)
-axis(side = 2, at = seq(0,400, by = 100))
+axis(side = 2, at = seq(0,200, by = 50))
 
 
 # Determine true emission state (on / off)
@@ -954,14 +949,14 @@ to.plot <- table(num.correct.vec)
 b <- barplot(to.plot,  yaxt = "n",
              col = alpha(mako(7)[1:6], 1),
              border = NA,
-             ylim = c(0,500),
+             ylim = c(0,200),
              main = round(mean(num.correct.vec, na.rm = T), 2),
              ylab = "Frequency")
 
 axis(side = 1, at = b, labels = NA)
-axis(side = 2, at = seq(0,500, by = 100))
+axis(side = 2, at = seq(0,200, by = 50))
 text(x = b,
-     y = to.plot+20,
+     y = to.plot+5,
      labels = paste0(round(100*percent, 1), "%"),
      offset = 5,
      xpd = NA)
