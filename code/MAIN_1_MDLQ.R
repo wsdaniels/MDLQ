@@ -20,23 +20,22 @@ library(zoo)
 #---------------------------------------------------------------------------
 
 # Number of cores to use. Set equal to 1 to run in serial.
-num.cores.to.use <- 8
+num.cores.to.use <- 6
 
 # Length of inversion window [minutes]
 interval.length <- 30
 
 # Number of minutes to advance the inversion window
-step.size <- 10
+step.size <- 30
 
 # Path to output from atmospheric dispersion model
-# forward.model.path <- '../input_data/forward_model_output_ADED2024.RData'
-forward.model.path <- '/Users/wdaniels/Desktop/Ambrosius-A_Qube_DLQ_Input_1_week.RData'
+forward.model.path <- '../input_data/forward_model_output_ADED2024.RData'
 
 # Location to save MDLQ output
-output.file.path <- '../output_data/MDLQ_output_Expand_1week_test_WD.RData'
+output.file.path <- '../output_data/MDLQ_output_ADED2024_30min_interval_30min_step.RData'
 
 # Path to helper file that contains the Gibbs updates for the MDLQ model
-spike.slab.regression.path <- '../code/HELPER_spike_slab_regression.R'
+spike.slab.regression.path <- '../code/HELPER_MCMC.R'
 
 # Path to helper file that contains functions from: https://doi.org/10.1525/elementa.2023.00110
 # These functions remove background concentrations and perform event detection
@@ -186,7 +185,7 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
       out <- tryCatch(
         { out <- ss.regress(y=y, X=X,
                             n.samples = 2000,
-                            n.burn.in = 500)
+                            n.burn.in = 250)
         }, error = function(msg){
           out <- "DNC"
           return(out)
