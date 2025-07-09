@@ -243,17 +243,13 @@ stopCluster(cl)
 
 
 # Package up MDLQ results
-to.save <- list(times = times, 
-                obs = obs,
-                source.names = source.names,
-                WD = data$WD,
-                WS = data$WS,
-                out = big.out,
-                Wellhead.West = data$Wellhead.West,
-                Wellhead.East = data$Wellhead.East,
-                Tanks = data$Tanks,
-                Separator.West = data$Separator.West,
-                Separator.East = data$Separator.East)
+to.save <- c(list(times = times,
+                  obs = obs,
+                  source.names = source.names,
+                  WD = data$WD,
+                  WS = data$WS,
+                  out = big.out),
+             sims)
 
 # Save results
 saveRDS(to.save, output.file.path)
