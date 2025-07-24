@@ -32,7 +32,7 @@ interval.length <- 30
 step.size <- 30
 
 # Location of MDLQ output 
-data <- readRDS('../output_data/MDLQ_output_ADED2024_30min_interval_30min_step.RData')
+data <- readRDS('../output_data/MDLQ_output_ADED2024_overlap_fix.RData')
 
 # Location of the METEC controlled release ground truth data
 leak.data <- readRDS('../input_data/leak_data.RData')
@@ -79,44 +79,57 @@ q.hat.median <- lapply(data$out, function(X) X[[5]])
 q.hat.median <- do.call(rbind, q.hat.median)
 
 
+sum(q.hat == 0)/(nrow(q.hat)*ncol(q.hat))
 sum(q.hat == "no info")/(nrow(q.hat)*ncol(q.hat))
 sum(q.hat == "broke on betas")/(nrow(q.hat)*ncol(q.hat))
 sum(q.hat == "decreasing betas")/(nrow(q.hat)*ncol(q.hat))
 sum(q.hat == "no overlap")/(nrow(q.hat)*ncol(q.hat))
+sum(q.hat == "DNC")/(nrow(q.hat)*ncol(q.hat))
 
 
-ni.mask <- q.hat == "no info"
-dnc.mask <- q.hat == "broke on betas" | q.hat == "no overlap"
+ni.mask <- q.hat == "no info" | q.hat == "no overlap"
+dnc.mask <- q.hat == "broke on betas" | q.hat == "DNC" | q.hat == "decreasing betas"
 
 q.hat.lower[q.hat.lower == "no info"] <- NA
 q.hat.lower[q.hat.lower == "broke on betas"] <- NA
 q.hat.lower[q.hat.lower == "decreasing betas"] <- NA
 q.hat.lower[q.hat.lower == "no overlap"] <- NA
+q.hat.lower[q.hat.lower == "DNC"] <- NA
 q.hat.lower <- matrix(as.numeric(q.hat.lower), ncol = ncol(q.hat.lower))
 
 q.hat.upper[q.hat.upper == "no info"] <- NA
 q.hat.upper[q.hat.upper == "broke on betas"] <- NA
 q.hat.upper[q.hat.upper == "decreasing betas"] <- NA
 q.hat.upper[q.hat.upper == "no overlap"] <- NA
+q.hat.upper[q.hat.upper == "DNC"] <- NA
 q.hat.upper <- matrix(as.numeric(q.hat.upper), ncol = ncol(q.hat.upper))
-
-pis[pis == "no info"] <- NA
-pis[pis == "broke on betas"] <- NA
-pis[pis == "decreasing betas"] <- NA
-pis[pis == "no overlap"] <- NA
-pis <- matrix(as.numeric(pis), ncol = ncol(pis))
 
 q.hat[q.hat == "no info"] <- NA
 q.hat[q.hat == "broke on betas"] <- NA
 q.hat[q.hat == "decreasing betas"] <- NA
 q.hat[q.hat == "no overlap"] <- NA
+q.hat[q.hat == "DNC"] <- NA
 q.hat <- matrix(as.numeric(q.hat), ncol = ncol(q.hat))
+
+pis[pis == "no info"] <- NA
+pis[pis == "broke on betas"] <- NA
+pis[pis == "decreasing betas"] <- NA
+pis[pis == "no overlap"] <- NA
+pis[pis == "DNC"] <- NA
+pis <- matrix(as.numeric(pis), ncol = ncol(pis))
 
 q.hat.median[q.hat.median == "no info"] <- NA
 q.hat.median[q.hat.median == "broke on betas"] <- NA
 q.hat.median[q.hat.median == "decreasing betas"] <- NA
 q.hat.median[q.hat.median == "no overlap"] <- NA
+q.hat.median[q.hat.median == "DNC"] <- NA
 q.hat.median <- matrix(as.numeric(q.hat.median), ncol = ncol(q.hat.median))
+
+
+q.hat <- na.approx(q.hat)
+q.hat.lower <- na.approx(q.hat.lower)
+q.hat.upper <- na.approx(q.hat.upper)
+
 
 mcmc <- lapply(data$out, function(X) X[[6]])
 
@@ -545,18 +558,34 @@ dev.off()
 # Take samples from the posterior of the betas to create distribution of inventory estimates
 n.samples <- 4000
 samples <- array(NA, dim = c(nrow(q.hat), ncol(q.hat), n.samples))
+na.mask <- ni.mask | dnc.mask
 
 for (i in 1:ncol(q.hat)){
   for (j in 1:nrow(q.hat)){
+    
     if (is.na(q.hat[j,i])){
       samples[j,i, ] <- sample(na.omit(q.hat[,i]), n.samples, replace = T)
+    } else if (na.mask[j,i]){
+      samples[j,i, ] <- q.hat[j,i]
     } else if (q.hat[j,i] == 0){
       samples[j,i, ] <- 0
     } else {
       samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
-    }
+    } 
   }
 }
+
+# for (i in 1:ncol(q.hat)){
+#   for (j in 1:nrow(q.hat)){
+#     if (is.na(q.hat[j,i])){
+#       samples[j,i, ] <- sample(na.omit(q.hat[,i]), n.samples, replace = T)
+#     } else if (q.hat[j,i] == 0){
+#       samples[j,i, ] <- 0
+#     } else {
+#       samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
+#     }
+#   }
+# }
 
 # Sum over the inversion windows
 inventory.samples <- t(apply(samples, c(2,3), sum))*step.size/60/1000
@@ -801,17 +830,34 @@ q.hat.tmp <- q.hat[!to.remove, ]
 n.samples <- 4000
 samples <- array(NA, dim = c(nrow(q.hat.tmp), ncol(q.hat.tmp), n.samples))
 
+na.mask.tmp <- na.mask[!to.remove, ]
+
 for (i in 1:ncol(q.hat.tmp)){
   for (j in 1:nrow(q.hat.tmp)){
+    
     if (is.na(q.hat.tmp[j,i])){
       samples[j,i, ] <- sample(na.omit(q.hat.tmp[,i]), n.samples, replace = T)
+    } else if (na.mask.tmp[j,i]){
+      samples[j,i, ] <- q.hat.tmp[j,i]
     } else if (q.hat.tmp[j,i] == 0){
       samples[j,i, ] <- 0
     } else {
       samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
-    }
+    } 
   }
 }
+
+# for (i in 1:ncol(q.hat.tmp)){
+#   for (j in 1:nrow(q.hat.tmp)){
+#     if (is.na(q.hat.tmp[j,i])){
+#       samples[j,i, ] <- sample(na.omit(q.hat.tmp[,i]), n.samples, replace = T)
+#     } else if (q.hat.tmp[j,i] == 0){
+#       samples[j,i, ] <- 0
+#     } else {
+#       samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
+#     }
+#   }
+# }
 
 inventory.samples <- t(apply(samples, c(2,3), sum))*step.size/60/1000
 

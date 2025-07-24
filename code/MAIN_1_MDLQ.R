@@ -161,8 +161,9 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
   # Subset to just the sources with information
   X <- matrix(X[, info.mask], nrow = length(y))
   
-  # If all zeros, set emission rate for sources with information to zero
-  if (all(y == 0)){
+  # If mostly zeros, set emission rate for sources with information to zero
+  # if (all(y == 0)){
+  if (sum(y > 0) < 5 & all(y[y > 0] < 1)){
     
     q.hat[info.mask] <-
       q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
@@ -181,45 +182,50 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
     # Subset to just the sources with overlap
     X <- matrix(X[, overlap.mask], nrow = length(y))
     
-    
-    # q.hat[info.mask] <-
-    #   q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
-    #   pis[info.mask] <- q.hat.median[info.mask] <- "invert"
-    
-    # Run the MDLQ model
-    out <- tryCatch(
-      { out <- ss.regress(y=y, X=X,
-                          n.samples = 2000,
-                          n.burn.in = 250)
-      }, error = function(msg){
-        out <- "DNC"
-        return(out)
-      }
-    )
-    
-    # catch any errors
-    if (length(out) == 1){
-      q.hat[info.mask] <-
-        q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
-        pis[info.mask] <- q.hat.median[info.mask] <- out
+    # Run the MDLQ model if any sources are left
+    if (ncol(X) > 0){
       
-      # Save output
-    } else {
-      these.rates <- out[, colnames(out) %in% paste0("beta", 1:ncol(X))]
-      these.pis <- out[, colnames(out) %in% paste0("pi", 1:ncol(X))]
+      # q.hat[info.mask] <-
+      #   q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
+      #   pis[info.mask] <- q.hat.median[info.mask] <- "invert"
       
-      these.rates <- as.matrix(these.rates, ncol = ncol(X))
-      these.pis <- as.matrix(these.pis, ncol = ncol(X))
+      out <- tryCatch(
+        { out <- ss.regress(y=y, X=X,
+                            n.samples = 2000,
+                            n.burn.in = 250)
+        }, error = function(msg){
+          out <- "DNC"
+          return(out)
+        }
+      )
       
-      q.hat[info.mask][overlap.mask] <- apply(these.rates, 2, mean) * 3.6
-      q.hat.lower[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.025)) * 3.6
-      q.hat.upper[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.975)) * 3.6
+      # catch any errors
+      if (length(out) == 1){
+        q.hat[info.mask][overlap.mask] <-
+          q.hat.lower[info.mask][overlap.mask] <-
+          q.hat.upper[info.mask][overlap.mask] <-
+          pis[info.mask][overlap.mask] <-
+          q.hat.median[info.mask][overlap.mask] <- out
+        
+        # Save output
+      } else {
+        these.rates <- out[, colnames(out) %in% paste0("beta", 1:ncol(X))]
+        these.pis   <- out[, colnames(out) %in% paste0("pi",   1:ncol(X))]
+        
+        these.rates <- as.matrix(these.rates, ncol = ncol(X))
+        these.pis   <- as.matrix(these.pis,   ncol = ncol(X))
+        
+        q.hat[info.mask][overlap.mask]       <- apply(these.rates, 2, mean) * 3.6
+        q.hat.lower[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.025)) * 3.6
+        q.hat.upper[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.975)) * 3.6
+        
+        pis[info.mask][overlap.mask] <- apply(these.pis, 2, mean)
+        
+        q.hat.median[info.mask][overlap.mask] <- apply(these.rates, 2, median) * 3.6
+        
+      } # End if to check for MCMC convergence
       
-      pis[info.mask][overlap.mask] <- apply(these.pis, 2, mean)
-      
-      q.hat.median[info.mask][overlap.mask] <- apply(these.rates, 2, median) * 3.6
-      
-    } # End if to check for MCMC convergence
+    } # End if to check if there are any columns of X left
     
   } # End if to check for enhancements in observations
   
