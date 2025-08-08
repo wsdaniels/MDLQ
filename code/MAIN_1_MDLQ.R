@@ -20,7 +20,7 @@ library(zoo)
 #---------------------------------------------------------------------------
 
 # Number of cores to use. Set equal to 1 to run in serial.
-num.cores.to.use <- 6
+num.cores.to.use <- 4
 
 # Length of inversion window [minutes]
 interval.length <- 30
@@ -41,6 +41,10 @@ spike.slab.regression.path <- '../code/HELPER_MCMC.R'
 # These functions remove background concentrations and perform event detection
 helper.function.path <- '../code/HELPER_functions.R'
 
+# Index (starting at 1) of the first simulation file in the "data" object
+first.sim.ind <- 5
+
+
 # END OF USER INPUT - NO MODIFICATION NECESSARY BELOW THIS POINT
 #---------------------------------------------------------------------------
 
@@ -56,7 +60,6 @@ source(helper.function.path)
 # Read in simulation data
 data <- readRDS(forward.model.path)
 
-
 # Trim data so that they start and end at either the hour or half hour. 
 # This makes it so that all 30-minute intervals at aligned 
 # This step was written by Spencer Kidd and added June 11, 2025
@@ -67,7 +70,7 @@ data$times <- data$times[to.keep]
 data$WD <- data$WD[to.keep]
 data$WS <- data$WS[to.keep]
 data$obs <- data$obs[to.keep, ]
-data[5:length(data)] <- lapply(data[5:length(data)], function(X) X[to.keep, ])
+data[first.sim.ind:length(data)] <- lapply(data[first.sim.ind:length(data)], function(X) X[to.keep, ])
 
 
 # Pull out sensor observations and replace NA's that are not on edge of 
@@ -81,7 +84,7 @@ n.r <- ncol(obs)
 times <- data$times
 
 # Pull out the simulation predictions
-sims <- data[5:length(data)]
+sims <- data[first.sim.ind:length(data)]
 
 # Grab source info
 n.s <- length(sims) 
@@ -94,7 +97,6 @@ source.names <- names(sims)
 
 # Remove background using the method from: https://doi.org/10.1525/elementa.2023.00110
 obs <- remove.background(obs, gap.time = 30)
-
 
 
 # STEP 4: METHANE EMISSION SOURCE APPORTIONMENT
@@ -113,7 +115,7 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
   
   # Initialize vectors to hold output
   q.hat <- q.hat.lower <- q.hat.upper <- pis <- q.hat.median <- vector(length = n.s)
-  these.rates <- NA
+  these.rates <- q.max <- NA
   
   # Mask in this quantification interval
   sub.mask <- seq((a-1)*step.size + 1,
@@ -141,17 +143,15 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
     y <- c(y, obs[sub.mask, r])
   }
   
-  if(F){
-    plot(y, type = "l", ylim = c(0,5), lwd = 3)
-    lines(X[,1], col = "red")
-    lines(X[,2], col = "blue")
-    lines(X[,3], col = "green")
-    lines(X[,4], col = "orange")
-    lines(X[,5], col = "purple")
-  }
+  if(T){
+    plot(y, type = "l", ylim = c(0,50), lwd = 3)
+    for (p in 1:length(q.hat)){
+      if (!is.na(as.numeric(q.hat[p]))){
+        lines(X[,p], col = p+1)    
+      }}}
   
   # Determine which sources have downwind sensors (i.e., which sources have information)
-  info.mask <- apply(X, 2, function(this.col) sum(this.col > 0.5) > 4)
+  info.mask <- apply(X, 2, function(this.col) sum(this.col > 0.25) > 4)
   
   # Save information / no information mask
   q.hat[!info.mask] <-
@@ -162,7 +162,7 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
   X <- matrix(X[, info.mask], nrow = length(y))
   
   # If mostly zeros, set emission rate for sources with information to zero
-  # if (all(y == 0)){
+  # OLD VERSION THAT WAS TOO STRICT: if (all(y == 0)){
   if (sum(y > 0) < 5 & all(y[y > 0] < 1)){
     
     q.hat[info.mask] <-
@@ -172,7 +172,10 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
   } else {
     
     # Determine which sources have overlap between simulated enhancements and enhancements in observations
-    overlap.mask <- apply(X, 2, function(this.col) sum(this.col[y > 0] > 1e-3) > 4)
+    dot <- as.vector(crossprod(y, X))
+    norm2 <- colSums(X^2, na.rm = T)
+    q.max <- 2 * dot / norm2
+    overlap.mask <- q.max > (0.1 / 3.6) # q of at least 0.1 kg/hr
     
     # Save overlap / no overlap mask
     q.hat[info.mask][!overlap.mask] <-
@@ -190,9 +193,9 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
       #   pis[info.mask] <- q.hat.median[info.mask] <- "invert"
       
       out <- tryCatch(
-        { out <- ss.regress(y=y, X=X,
-                            n.samples = 2000,
-                            n.burn.in = 250)
+        { out <- run.mdlq.mcmc(y=y, X=X,
+                               n.samples = 1700,
+                               n.burn.in = 200)
         }, error = function(msg){
           out <- "DNC"
           return(out)
@@ -224,23 +227,21 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
         q.hat.median[info.mask][overlap.mask] <- apply(these.rates, 2, median) * 3.6
         
       } # End if to check for MCMC convergence
-      
     } # End if to check if there are any columns of X left
-    
   } # End if to check for enhancements in observations
   
   if(F){
-    plot(y, type = "l", ylim = c(0,3), lwd = 3)
-    lines(X[,1] * as.numeric(q.hat[1])/3.6, col = "red")
-    lines(X[,2] * as.numeric(q.hat[2])/3.6, col = "blue")
-    lines(X[,3] * as.numeric(q.hat[3])/3.6, col = "green")
-    lines(X[,4] * as.numeric(q.hat[4])/3.6, col = "orange")
-    lines(X[,5] * as.numeric(q.hat[5])/3.6, col = "purple")
-  }
+    plot(y, type = "l", ylim = c(0,30), lwd = 3)
+    counter <- 1
+    for (p in 1:length(q.hat)){
+      if (!is.na(as.numeric(q.hat[p]))){
+        lines(X[,counter] * as.numeric(q.hat[p])/3.6, col = p+1)    
+        counter <- counter + 1
+      }}}
   
   # Save output
   to.save <- list(q.hat = q.hat, q.hat.lower = q.hat.lower, q.hat.upper = q.hat.upper,
-                  pis = pis, q.hat.median = q.hat.median, rates = these.rates * 3.6)
+                  pis = pis, q.hat.median = q.hat.median, rates = these.rates * 3.6, q.max = q.max)
   
   to.save
   

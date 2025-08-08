@@ -1,55 +1,23 @@
+# UNCOMMENT THESE FOR TESTING
+# a.vec = rep(1, ncol(X))
+# b.vec = rep(1, ncol(X))
+# c.vec = rep(1, ncol(X))
+# d.vec = rep(1, ncol(X))
+# k = 1
+# l = 1
+# n.samples = 300
+# n.burn.in = 50
+# plot.trace = F
 
-inv.transform <- function(sim.order, p, beta.mean, beta.chol, j){
-  # print(paste0( i, "/", n.samples, " - sim order: ", sim.order))
-  num.samples <- round(ifelse(25^log(sim.order) < 500, 500, 25^log(sim.order)))
-  these.betas <- vector(length= num.samples)
-  for (o in 1:length(these.betas)){
-    u <- runif(p, min = 1-10^(-sim.order), max = 1)
-    Z <- qnorm(u)
-    these.betas[o] <- (beta.mean + beta.chol %*% Z)[j]
-  }
-  these.betas[is.infinite(these.betas)] <- NA
-  # hist(these.betas, xlim = c(-0.1, 0.01))
-  # hist(these.betas, xlim = c(-0.06,0.01), breaks = seq(-0.06, 0.02, by = 0.01/2))
-  # hist(these.betas, xlim = c(-0.06,0.01), breaks = seq(-0.06, 0.02, by = 0.01/2), col = alpha("green", 0.1), add = T)
-  this.beta <- NA
-  if (any(these.betas > 0, na.rm = T)){
-    this.beta <- these.betas[these.betas > 0 & !is.na(these.betas)][1]
-    return(this.beta)
-  } else {
-    return(NA)
-  }
-  
-}
-
-mills.approx <- function(b, p, beta.mean, beta.chol, j){
-  # print(paste0( i, "/", n.samples, " - b value: ", b))
-  num.samples <- 500
-  these.betas <- vector(length= num.samples)
-  for (o in 1:length(these.betas)){
-    U <- runif(p)
-    Z <- sqrt(b^2 - 2 * log(U/b))
-    these.betas[o] <- (beta.mean + beta.chol %*% Z)[j]
-  }
-  
-  if (any(these.betas > 0)){
-    this.beta <- these.betas[these.betas > 0][1]
-    return(list(this.beta, mean(these.betas)))
-  } else {
-    return(list(NA, mean(these.betas)))
-  }
-  
-}
-
-
-ss.regress <- function(y, X, 
-                       a.vec = rep(1, ncol(X)), b.vec = rep(1, ncol(X)), # Hyper priors for theta_i's
-                       c.vec = rep(1, ncol(X)), d.vec = rep(1, ncol(X)), # Hyper priors for tau2_i's
-                       k = 1, l = 1, # hyper priors on nu
-                       n.samples, n.burn.in = round(n.samples / 4, 0),
-                       plot.trace = F) {
+run.mdlq.mcmc <- function(y, X, 
+                          a.vec = rep(1, ncol(X)), b.vec = rep(1, ncol(X)), # Hyper priors for theta_i's
+                          c.vec = rep(1, ncol(X)), d.vec = rep(1, ncol(X)), # Hyper priors for tau2_i's
+                          k = 1, l = 1, # hyper priors on nu
+                          n.samples, n.burn.in = round(n.samples / 4, 0),
+                          plot.trace = F) {
   
   library(MASS)
+  library(tmvtnorm)
   
   p <- ncol(X)
   n <- nrow(X)
@@ -68,6 +36,8 @@ ss.regress <- function(y, X,
   sigma.orig <- var(predict(m) - y)
   beta.orig <- ifelse(coef(m) > 0, coef(m), 0.25)
   beta.orig <- ifelse(beta.orig < 100, beta.orig, 10)
+  
+  # Initialize res as before
   res[1, ] <- c(rep(0, p), rep(1, p), rep(0.5, p), beta.orig, sigma.orig, 0, 2)
   res[1, ] <- ifelse(is.na(res[1,]), 0.25, res[1,])
   
@@ -79,6 +49,8 @@ ss.regress <- function(y, X,
   
   # we start running the Gibbs sampler
   for (i in seq(2, n.samples)) {
+    
+    print(paste0(i, "/", n.samples))
     
     # first, get all the values of the previous time point
     pi.prev <- res[i-1, seq(1, p)]
@@ -113,14 +85,12 @@ ss.regress <- function(y, X,
     sigma2.new <- 1 / rgamma(1, n/2 + nu.prev/2, t(err) %*% R.inv %*% err / 2 + nu.prev/2)
     
     nu.target <- function(nu){
-      
       part1 <- (nu/2) * log(nu/2)
       part2 <- -lgamma(nu/2)
       part3 <- (-(nu/2)-1) * log(sigma2.new)
       part4 <- (-k-1) * log(nu)
       part5 <- -(nu/2) / sigma2.new
       part6 <- -l / nu
-      
       return(part1 + part2 + part3 + part4 + part5 + part6)
     }
     
@@ -146,7 +116,6 @@ ss.regress <- function(y, X,
     }
     
     r.target <- function(r){
-      
       R.coef <- 1 / (1-r^2)
       R.mat <- matrix(0, nrow = n, ncol = n)
       diag(R.mat) <- 1 + r^2
@@ -158,7 +127,6 @@ ss.regress <- function(y, X,
       
       part1 <- log( (1-r^2)^(-(n-1)/2) )
       part2 <- (-1/(2*sigma2.new)) * t(err) %*% R.inv %*% err
-      
       return(part1 + part2)
     }
     
@@ -196,105 +164,47 @@ ss.regress <- function(y, X,
     XtRy <- t(X) %*% R.inv %*% y
     
     beta.cov <- qr.solve( (1/sigma2.new) * XtRX )
-    beta.chol <- chol(beta.cov)
+    beta.cov <- as.matrix(nearPD(beta.cov)$mat)
     beta.new <- vector(length = p)
     
     for (j in sample(seq(p))){
       e <- rep(0, p)
       e[j] <- 1
       
-      beta.mean <- beta.cov %*% ((XtRy/sigma2.new) - matrix(e/(tau2.new * sigma2.new), nrow = p))
+      beta.mean <- as.vector(beta.cov %*% ((XtRy/sigma2.new) - matrix(e/(tau2.new * sigma2.new), nrow = p)))
       
-      found.beta <- F
-      
-      # Check the first inv transform
-      this.beta <- inv.transform(sim.order = 0, p, beta.mean, beta.chol, j)
-      if (!is.na(this.beta)){ found.beta <- T }
-      
-      # If first inv transform didn't work, do other stuff
-      if (!found.beta){
-        
-        # First check the last inv transform
-        this.beta <- inv.transform(sim.order = 10, p, beta.mean, beta.chol, j)
-        if (!is.na(this.beta)){ found.beta <- T }
-        
-        # If the last inv transform found something, check the intermediate inv transforms
-        if (found.beta){
-          for (repeater in 1:10){
-            for (sim.order in seq(0,10, by = 0.2)){
-              this.beta <- inv.transform(sim.order, p, beta.mean, beta.chol, j)
-              if (!is.na(this.beta)){ break }
-            }
-            if (!is.na(this.beta)){ break }
-          }
-          if (!is.na(this.beta)){
-            beta.new[j] <- this.beta  
-          } else {
-            found.beta <- F
-          }
+      beta.samples <- rtmvnorm(n=500, mean = beta.mean, sigma = beta.cov,
+                               lower = rep(0, length(beta.mean)),
+                               upper = rep(Inf, length(beta.mean)),
+                               algorithm = "gibbs")
+      counter <- 1
+      best.yet <- beta.samples
+      while (sum(is.na(beta.samples)) > 0 & counter < 100){
+        beta.samples <- rtmvnorm(n=500, mean = beta.mean, sigma = beta.cov,
+                                 lower = rep(0, length(beta.mean)),
+                                 upper = rep(Inf, length(beta.mean)),
+                                 algorithm = "gibbs")
+        if (sum(is.na(beta.samples)) < sum(is.na(best.yet))){
+          best.yet <- beta.samples
         }
-        
-        # If the last inv transform didn't find anything, move onto the mills approx
-        if (!found.beta){
-          b.seq <- seq(1, 10000, by = 100)
-          avg.betas <- vector(length = length(b.seq))
-          count <- 1
-          for (b in b.seq){
-            tmp <- mills.approx(b, p, beta.mean, beta.chol, j)
-            this.beta <- tmp[[1]]
-            avg.betas[count] <- tmp[[2]]
-            count <- count + 1
-            if (!is.na(this.beta)){ 
-              found.beta <- T
-              break 
-            }
-          }
-          
-          # If the mills approx found something, zoom in the b grid
-          if (found.beta){
-            
-            if (b == 1){
-              b.seq.zoom <- seq(1,100, by = 1)
-            } else {
-              # NOTE: the extra plus 2 is for when a beta was found at the very upper
-              # end of the range. A resample from that range might not find it again,
-              # so extend the range slightly so that a beta can still be found
-              b.seq.zoom <- seq(b.seq[count-2], b.seq[count-1+2], by = 1)
-            }
-            
-            avg.betas <- vector(length = length(b.seq.zoom))
-            for (b in b.seq.zoom){
-              tmp <- mills.approx(b, p, beta.mean, beta.chol, j)
-              this.beta <- tmp[[1]]
-              if (!is.na(this.beta)){ 
-                break 
-              }
-            }
-            
-            beta.new[j] <- this.beta  
-            
-            # If the mills approx didnt' find something, diagnose why not
-          } else {
-            
-            this.fit <- lm(avg.betas ~ b.seq)
-            if (coef(this.fit)[2] < 0){
-              print('decreasing betas')
-              return('decreasing betas')
-            } else {
-              print('b did not go high enough')
-              return('b did not go high enough')
-            }
-            
-          } # End check if the mills approx found something
-        } # End check if the last inv transform found something
-        
-        # If first inv transform worked, save beta
-      } else {
-        beta.new[j] <- this.beta  
+        counter <- counter + 1
+      }
+      
+      beta.samples <- best.yet
+      beta.samples.trimmed <- beta.samples[101:500, ]
+      
+      
+      beta.samples.trimmed[is.infinite(beta.samples.trimmed)] <- NA
+      
+      last.row <- max(which(apply(beta.samples.trimmed, 1, function(X) all(!is.na(X)))))
+      beta.new[j] <- beta.samples.trimmed[last.row, j]
+      
+      if (is.na(beta.new[j])){
+        print("broke on betas")
+        return("broke on betas")
       }
       
     } # end loop through the betas
-    
     
     
     # sample each pi_j in random order
@@ -328,7 +238,6 @@ ss.regress <- function(y, X,
     
     # add new samples
     res[i, ] <- c(pi.new, tau2.new, theta.new, beta.new*pi.new, sigma2.new, r.new, nu.new)
-    
   } # End Gibbs sampler
   
   out <- as.data.frame(res[-seq(n.burn.in), ])
