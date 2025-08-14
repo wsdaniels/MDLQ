@@ -194,8 +194,8 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
       
       out <- tryCatch(
         { out <- run.mdlq.mcmc(y=y, X=X,
-                               n.samples = 1700,
-                               n.burn.in = 200)
+                               n.samples = 750,
+                               n.burn.in = 250)
         }, error = function(msg){
           out <- "DNC"
           return(out)
