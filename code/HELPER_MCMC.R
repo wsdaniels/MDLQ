@@ -173,14 +173,14 @@ run.mdlq.mcmc <- function(y, X,
       
       beta.mean <- as.vector(beta.cov %*% ((XtRy/sigma2.new) - matrix(e/(tau2.new * sigma2.new), nrow = p)))
       
-      beta.samples <- rtmvnorm(n=500, mean = beta.mean, sigma = beta.cov,
+      beta.samples <- rtmvnorm(n=100, mean = beta.mean, sigma = beta.cov,
                                lower = rep(0, length(beta.mean)),
                                upper = rep(Inf, length(beta.mean)),
                                algorithm = "gibbs")
       counter <- 1
       best.yet <- beta.samples
       while (sum(is.na(beta.samples)) > 0 & counter < 100){
-        beta.samples <- rtmvnorm(n=500, mean = beta.mean, sigma = beta.cov,
+        beta.samples <- rtmvnorm(n=100, mean = beta.mean, sigma = beta.cov,
                                  lower = rep(0, length(beta.mean)),
                                  upper = rep(Inf, length(beta.mean)),
                                  algorithm = "gibbs")
@@ -191,13 +191,10 @@ run.mdlq.mcmc <- function(y, X,
       }
       
       beta.samples <- best.yet
-      beta.samples.trimmed <- beta.samples[101:500, ]
+      beta.samples[is.infinite(beta.samples)] <- NA
       
-      
-      beta.samples.trimmed[is.infinite(beta.samples.trimmed)] <- NA
-      
-      last.row <- max(which(apply(beta.samples.trimmed, 1, function(X) all(!is.na(X)))))
-      beta.new[j] <- beta.samples.trimmed[last.row, j]
+      last.row <- max(which(apply(beta.samples, 1, function(X) all(!is.na(X)))))
+      beta.new[j] <- beta.samples[last.row, j]
       
       if (is.na(beta.new[j])){
         print("broke on betas")
