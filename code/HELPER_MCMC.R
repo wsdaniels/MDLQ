@@ -1,13 +1,13 @@
 # UNCOMMENT THESE FOR TESTING
-# a.vec = rep(1, ncol(X))
-# b.vec = rep(1, ncol(X))
-# c.vec = rep(1, ncol(X))
-# d.vec = rep(1, ncol(X))
-# k = 1
-# l = 1
-# n.samples = 300
-# n.burn.in = 50
-# plot.trace = F
+a.vec = rep(1, ncol(X))
+b.vec = rep(1, ncol(X))
+c.vec = rep(1, ncol(X))
+d.vec = rep(1, ncol(X))
+k = 1
+l = 1
+n.samples = 300
+n.burn.in = 50
+plot.trace = F
 
 run.mdlq.mcmc <- function(y, X, 
                           a.vec = rep(1, ncol(X)), b.vec = rep(1, ncol(X)), # Hyper priors for theta_i's
@@ -191,12 +191,11 @@ run.mdlq.mcmc <- function(y, X,
       }
       
       beta.samples <- best.yet
-      beta.samples.trimmed <- beta.samples[50:100, ]
-      beta.samples.trimmed[is.infinite(beta.samples.trimmed)] <- NA
+      beta.samples <- matrix(beta.samples, ncol = ncol(X)) # Fix by Spencer
       
-      ### Fix by Spencer
-      beta.samples <- matrix(beta.samples, ncol = ncol(X))
-      ###
+      beta.samples.trimmed <- beta.samples[50:100, ]
+      beta.samples.trimmed <- matrix(beta.samples.trimmed, ncol = ncol(X))
+      beta.samples.trimmed[is.infinite(beta.samples.trimmed)] <- NA
       
       last.row <- max(which(apply(beta.samples.trimmed, 1, function(X) all(!is.na(X)))))
       beta.new[j] <- beta.samples.trimmed[last.row, j]
