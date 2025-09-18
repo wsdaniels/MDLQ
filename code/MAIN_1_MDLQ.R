@@ -15,6 +15,8 @@ library(foreach)
 library(doParallel)
 library(zoo)
 
+# Start code timer
+code.start.time <- Sys.time()
 
 # START USER INPUT
 #---------------------------------------------------------------------------
@@ -75,7 +77,7 @@ data[first.sim.ind:length(data)] <- lapply(data[first.sim.ind:length(data)], fun
 
 # Pull out sensor observations and replace NA's that are not on edge of 
 # the time series with interpolated values
-obs <- na.approx(data$obs, na.rm = F)
+obs <- na.approx(data$obs, na.rm = F, maxgap = 10)
 
 # Number of sensors
 n.r <- ncol(obs)
@@ -143,107 +145,115 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
     y <- c(y, obs[sub.mask, r])
   }
   
-  if(T){
-    plot(y, type = "l", ylim = c(0,50), lwd = 3)
-    for (p in 1:length(q.hat)){
-      if (!is.na(as.numeric(q.hat[p]))){
-        lines(X[,p], col = p+1)    
-      }}}
-  
-  # Determine which sources have downwind sensors (i.e., which sources have information)
-  info.mask <- apply(X, 2, function(this.col) sum(this.col > 0.25) > 4)
-  
-  # Save information / no information mask
-  q.hat[!info.mask] <-
-    q.hat.lower[!info.mask] <- q.hat.upper[!info.mask] <-
-    pis[!info.mask] <- q.hat.median[!info.mask] <- "no info"
-  
-  # Subset to just the sources with information
-  X <- matrix(X[, info.mask], nrow = length(y))
-  
-  # If mostly zeros, set emission rate for sources with information to zero
-  # OLD VERSION THAT WAS TOO STRICT: if (all(y == 0)){
-  if (sum(y > 0) < 5 & all(y[y > 0] < 1)){
-    
-    q.hat[info.mask] <-
-      q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
-      pis[info.mask] <- q.hat.median[info.mask] <- 0
+  # Check for NA y values
+  if (any(is.na(y))){ 
+    print("NA y")
     
   } else {
     
-    # Determine which sources have overlap between simulated enhancements and enhancements in observations
-    dot <- as.vector(crossprod(y, X))
-    norm2 <- colSums(X^2, na.rm = T)
-    q.max <- 2 * dot / norm2
-    overlap.mask <- q.max > (0.1 / 3.6) # q of at least 0.1 kg/hr
+    if(T){
+      plot(y, type = "l", ylim = c(0,50), lwd = 3)
+      for (p in 1:length(q.hat)){
+        if (!is.na(as.numeric(q.hat[p]))){
+          lines(X[,p], col = p+1)    
+        }}}
     
-    # Save overlap / no overlap mask
-    q.hat[info.mask][!overlap.mask] <-
-      q.hat.lower[info.mask][!overlap.mask] <- q.hat.upper[info.mask][!overlap.mask] <-
-      pis[info.mask][!overlap.mask] <- q.hat.median[info.mask][!overlap.mask] <- "no overlap"
+    # Determine which sources have downwind sensors (i.e., which sources have information)
+    info.mask <- apply(X, 2, function(this.col) sum(this.col > 0.25) > 4)
     
-    # Subset to just the sources with overlap
-    X <- matrix(X[, overlap.mask], nrow = length(y))
+    # Save information / no information mask
+    q.hat[!info.mask] <-
+      q.hat.lower[!info.mask] <- q.hat.upper[!info.mask] <-
+      pis[!info.mask] <- q.hat.median[!info.mask] <- "no info"
     
-    # Run the MDLQ model if any sources are left
-    if (ncol(X) > 0){
+    # Subset to just the sources with information
+    X <- matrix(X[, info.mask], nrow = length(y))
+    
+    # If mostly zeros, set emission rate for sources with information to zero
+    # OLD VERSION THAT WAS TOO STRICT: if (all(y == 0)){
+    if (sum(y > 0) < 5 & all(y[y > 0] < 1)){
       
-      # q.hat[info.mask] <-
-      #   q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
-      #   pis[info.mask] <- q.hat.median[info.mask] <- "invert"
+      q.hat[info.mask] <-
+        q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
+        pis[info.mask] <- q.hat.median[info.mask] <- 0
       
-      out <- tryCatch(
-        { out <- run.mdlq.mcmc(y=y, X=X,
-                               n.samples = 750,
-                               n.burn.in = 250)
-        }, error = function(msg){
-          out <- "DNC"
-          return(out)
-        }
-      )
+    } else {
       
-      # catch any errors
-      if (length(out) == 1){
-        q.hat[info.mask][overlap.mask] <-
-          q.hat.lower[info.mask][overlap.mask] <-
-          q.hat.upper[info.mask][overlap.mask] <-
-          pis[info.mask][overlap.mask] <-
-          q.hat.median[info.mask][overlap.mask] <- out
+      # Determine which sources have overlap between simulated enhancements and enhancements in observations
+      dot <- as.vector(crossprod(y, X))
+      norm2 <- colSums(X^2, na.rm = T)
+      q.max <- 2 * dot / norm2
+      overlap.mask <- q.max > (0.1 / 3.6) # q of at least 0.1 kg/hr
+      
+      # Save overlap / no overlap mask
+      q.hat[info.mask][!overlap.mask] <-
+        q.hat.lower[info.mask][!overlap.mask] <- q.hat.upper[info.mask][!overlap.mask] <-
+        pis[info.mask][!overlap.mask] <- q.hat.median[info.mask][!overlap.mask] <- "no overlap"
+      
+      # Subset to just the sources with overlap
+      X <- matrix(X[, overlap.mask], nrow = length(y))
+      
+      # Run the MDLQ model if any sources are left
+      if (ncol(X) > 0){
         
-        # Save output
-      } else {
-        these.rates <- out[, colnames(out) %in% paste0("beta", 1:ncol(X))]
-        these.pis   <- out[, colnames(out) %in% paste0("pi",   1:ncol(X))]
+        # q.hat[info.mask] <-
+        #   q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
+        #   pis[info.mask] <- q.hat.median[info.mask] <- "invert"
         
-        these.rates <- as.matrix(these.rates, ncol = ncol(X))
-        these.pis   <- as.matrix(these.pis,   ncol = ncol(X))
+        out <- tryCatch(
+          { out <- run.mdlq.mcmc(y=y, X=X,
+                                 n.samples = 750,
+                                 n.burn.in = 250)
+          }, error = function(msg){
+            out <- "DNC"
+            return(out)
+          }
+        )
         
-        q.hat[info.mask][overlap.mask]       <- apply(these.rates, 2, mean) * 3.6
-        q.hat.lower[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.025)) * 3.6
-        q.hat.upper[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.975)) * 3.6
-        
-        pis[info.mask][overlap.mask] <- apply(these.pis, 2, mean)
-        
-        q.hat.median[info.mask][overlap.mask] <- apply(these.rates, 2, median) * 3.6
-        
-      } # End if to check for MCMC convergence
-    } # End if to check if there are any columns of X left
-  } # End if to check for enhancements in observations
-  
-  if(F){
-    plot(y, type = "l", ylim = c(0,30), lwd = 3)
-    counter <- 1
-    for (p in 1:length(q.hat)){
-      if (!is.na(as.numeric(q.hat[p]))){
-        lines(X[,counter] * as.numeric(q.hat[p])/3.6, col = p+1)    
-        counter <- counter + 1
-      }}}
-  
-  # Save output
-  to.save <- list(q.hat = q.hat, q.hat.lower = q.hat.lower, q.hat.upper = q.hat.upper,
-                  pis = pis, q.hat.median = q.hat.median, rates = these.rates * 3.6, q.max = q.max)
-  
-  to.save
+        # catch any errors
+        if (length(out) == 1){
+          q.hat[info.mask][overlap.mask] <-
+            q.hat.lower[info.mask][overlap.mask] <-
+            q.hat.upper[info.mask][overlap.mask] <-
+            pis[info.mask][overlap.mask] <-
+            q.hat.median[info.mask][overlap.mask] <- out
+          
+          # Save output
+        } else {
+          these.rates <- out[, colnames(out) %in% paste0("beta", 1:ncol(X))]
+          these.pis   <- out[, colnames(out) %in% paste0("pi",   1:ncol(X))]
+          
+          these.rates <- as.matrix(these.rates, ncol = ncol(X))
+          these.pis   <- as.matrix(these.pis,   ncol = ncol(X))
+          
+          q.hat[info.mask][overlap.mask]       <- apply(these.rates, 2, mean) * 3.6
+          q.hat.lower[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.025)) * 3.6
+          q.hat.upper[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.975)) * 3.6
+          
+          pis[info.mask][overlap.mask] <- apply(these.pis, 2, mean)
+          
+          q.hat.median[info.mask][overlap.mask] <- apply(these.rates, 2, median) * 3.6
+          
+        } # End if to check for MCMC convergence
+      } # End if to check if there are any columns of X left
+    } # End if to check for enhancements in observations
+    
+    if(F){
+      plot(y, type = "l", ylim = c(0,30), lwd = 3)
+      counter <- 1
+      for (p in 1:length(q.hat)){
+        if (!is.na(as.numeric(q.hat[p]))){
+          lines(X[,counter] * as.numeric(q.hat[p])/3.6, col = p+1)    
+          counter <- counter + 1
+        }}}
+    
+    # Save output
+    to.save <- list(q.hat = q.hat, q.hat.lower = q.hat.lower, q.hat.upper = q.hat.upper,
+                    pis = pis, q.hat.median = q.hat.median, rates = these.rates * 3.6, q.max = q.max)
+    
+    to.save
+    
+  } # End check for NA y values
   
 } # End loop through 30-minute intervals
 
@@ -263,3 +273,10 @@ to.save <- c(list(times = times,
 
 # Save results
 saveRDS(to.save, output.file.path)
+
+
+# End code timer
+code.stop.time <- Sys.time() 
+
+# Print wall clock execution time
+difftime(code.stop.time, code.start.time, units = "mins")
