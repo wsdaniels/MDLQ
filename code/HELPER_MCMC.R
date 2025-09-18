@@ -191,10 +191,24 @@ run.mdlq.mcmc <- function(y, X,
       }
       
       beta.samples <- best.yet
+<<<<<<< HEAD
       beta.samples[is.infinite(beta.samples)] <- NA
       
       last.row <- max(which(apply(beta.samples, 1, function(X) all(!is.na(X)))))
       beta.new[j] <- beta.samples[last.row, j]
+=======
+      beta.samples.trimmed <- beta.samples[50:100, ]
+      
+      
+      beta.samples.trimmed[is.infinite(beta.samples.trimmed)] <- NA
+      
+      ### Fix by Spencer
+      beta.samples <- matrix(beta.samples, ncol = ncol(X))
+      ###
+      
+      last.row <- max(which(apply(beta.samples.trimmed, 1, function(X) all(!is.na(X)))))
+      beta.new[j] <- beta.samples.trimmed[last.row, j]
+>>>>>>> 4d9a1fc (DNC fix in MCMC file)
       
       if (is.na(beta.new[j])){
         print("broke on betas")

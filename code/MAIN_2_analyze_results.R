@@ -33,7 +33,8 @@ interval.length <- 30
 step.size <- 30
 
 # Location of MDLQ output 
-data <- readRDS('../output_data/MDLQ_output_ADED2024_30min_interval_30min_step_overlap_inf_no_avg.RData')
+# data <- readRDS('../output_data/MDLQ_output_ADED2024_30min_interval_30min_step_overlap_inf_no_avg.RData')
+data <- readRDS('../../archive/MDLQ/all_output_files/MDLQ_output_ADED2024_30min_interval_30min_step_overlap_fix.RData')
 
 # Location of the METEC controlled release ground truth data
 leak.data <- readRDS('../input_data/leak_data.RData')
@@ -103,6 +104,7 @@ sum(q.hat == "broke on betas")/(nrow(q.hat)*ncol(q.hat))
 sum(q.hat == "decreasing betas")/(nrow(q.hat)*ncol(q.hat))
 sum(q.hat == "no overlap")/(nrow(q.hat)*ncol(q.hat))
 sum(q.hat == "DNC")/(nrow(q.hat)*ncol(q.hat))
+sum(q.hat == "NA y")/(nrow(q.hat)*ncol(q.hat))
 
 
 ni.mask <- q.hat == "no info" | q.hat == "no overlap"
@@ -113,6 +115,7 @@ q.hat[q.hat == "broke on betas"] <- NA
 q.hat[q.hat == "decreasing betas"] <- NA
 q.hat[q.hat == "no overlap"] <- NA
 q.hat[q.hat == "DNC"] <- NA
+q.hat[q.hat == "NA y"] <- NA
 q.hat <- matrix(as.numeric(q.hat), ncol = ncol(q.hat))
 
 q.hat.lower[q.hat.lower == "no info"] <- NA
@@ -120,6 +123,7 @@ q.hat.lower[q.hat.lower == "broke on betas"] <- NA
 q.hat.lower[q.hat.lower == "decreasing betas"] <- NA
 q.hat.lower[q.hat.lower == "no overlap"] <- NA
 q.hat.lower[q.hat.lower == "DNC"] <- NA
+q.hat.lower[q.hat.lower == "NA y"] <- NA
 q.hat.lower <- matrix(as.numeric(q.hat.lower), ncol = ncol(q.hat.lower))
 
 q.hat.upper[q.hat.upper == "no info"] <- NA
@@ -127,6 +131,7 @@ q.hat.upper[q.hat.upper == "broke on betas"] <- NA
 q.hat.upper[q.hat.upper == "decreasing betas"] <- NA
 q.hat.upper[q.hat.upper == "no overlap"] <- NA
 q.hat.upper[q.hat.upper == "DNC"] <- NA
+q.hat.upper[q.hat.upper == "NA y"] <- NA
 q.hat.upper <- matrix(as.numeric(q.hat.upper), ncol = ncol(q.hat.upper))
 
 pis[pis == "no info"] <- NA
@@ -134,6 +139,7 @@ pis[pis == "broke on betas"] <- NA
 pis[pis == "decreasing betas"] <- NA
 pis[pis == "no overlap"] <- NA
 pis[pis == "DNC"] <- NA
+pis[pis == "NA y"] <- NA
 pis <- matrix(as.numeric(pis), ncol = ncol(pis))
 
 q.hat.median[q.hat.median == "no info"] <- NA
@@ -141,6 +147,7 @@ q.hat.median[q.hat.median == "broke on betas"] <- NA
 q.hat.median[q.hat.median == "decreasing betas"] <- NA
 q.hat.median[q.hat.median == "no overlap"] <- NA
 q.hat.median[q.hat.median == "DNC"] <- NA
+q.hat.median[q.hat.median == "NA y"] <- NA
 q.hat.median <- matrix(as.numeric(q.hat.median), ncol = ncol(q.hat.median))
 
 
