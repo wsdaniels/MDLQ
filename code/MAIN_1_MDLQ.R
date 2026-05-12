@@ -1,9 +1,9 @@
-# Description: Performs multi-source emission event detection, localization,
+# Description: Performs multisource emission event detection, localization,
 #              and quantification using output from the Gaussian puff 
 #              atmospheric dispersion model and observations from point sensor
 #              networks.
-# Author: William Daniels (wdaniels@mines.edu)
-# Last Updated: December 30, 2024
+# Author: William Daniels (wdanie16@jh.edu)
+# Last Updated: May 2026
 
 # Clear environment
 if(!is.null(dev.list())){dev.off()}
@@ -22,20 +22,22 @@ code.start.time <- Sys.time()
 #---------------------------------------------------------------------------
 
 # Number of cores to use. Set equal to 1 to run in serial.
-num.cores.to.use <- 4
+num.cores.to.use <- 7
 
 # Length of inversion window [minutes]
 interval.length <- 30
 
 # Number of minutes to advance the inversion window
+# Set equal to "interval.length" to run on non-overlapping windows
 step.size <- 30
 
 # Path to output from atmospheric dispersion model
-forward.model.path <- '../input_data/forward_model_output_ADED2024.RData'
+forward.model.path <- '../input_data/input_data_SAMPLE.RData'
 
 # Location to save MDLQ output
-# output.file.path <- '../output_data/MDLQ_output_ADED2024_30min_interval_30min_step.RData'
-output.file.path <- '../output_data/MDLQ_output_ADED2024_30min_interval_30min_step.RData'
+output.file.path <- paste0('../output_data/MDLQ_output_',
+                           interval.length, 'min_interval_',
+                           interval.length, 'min_step_SAMPLE.RData')
 
 # Path to helper file that contains the Gibbs updates for the MDLQ model
 spike.slab.regression.path <- '../code/HELPER_MCMC.R'
@@ -75,7 +77,6 @@ data$WS <- data$WS[to.keep]
 data$obs <- data$obs[to.keep, ]
 data[first.sim.ind:length(data)] <- lapply(data[first.sim.ind:length(data)], function(X) X[to.keep, ])
 
-
 # Pull out sensor observations and replace NA's that are not on edge of 
 # the time series with interpolated values
 obs <- na.approx(data$obs, na.rm = F, maxgap = 10)
@@ -102,7 +103,7 @@ source.names <- names(sims)
 obs <- remove.background(obs, gap.time = 30)
 
 
-# STEP 4: METHANE EMISSION SOURCE APPORTIONMENT
+# STEP 3: METHANE EMISSION SOURCE APPORTIONMENT
 # ---------------------------------------------------------------------------
 
 # Compute total number of intervals
@@ -113,12 +114,12 @@ num.intervals <- floor(num.intervals)
 cl <- makeCluster(num.cores.to.use)
 registerDoParallel(cl)
 
-# Loop through 30-minute intervals
+# Loop through intervals
 big.out <- foreach(a = 1:num.intervals) %dopar% {
   
   # Initialize vectors to hold output
-  q.hat <- q.hat.lower <- q.hat.upper <- pis <- q.hat.median <- vector(length = n.s)
-  these.rates <- q.max <- NA
+  q.hat <- q.hat.lower <- q.hat.upper <- zs <- vector(length = n.s)
+  these.rates <- these.rs <- interval.start <- interval.end <- NA
   
   # Mask in this quantification interval
   sub.mask <- seq((a-1)*step.size + 1,
@@ -148,62 +149,34 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
   
   # Check for NA y values
   if (any(is.na(y))){ 
-    print("NA y")
+    q.hat[] <- q.hat.lower[] <- q.hat.upper[] <- zs[] <- "no info"
     
   } else {
-    
-    if(T){
-      plot(y, type = "l", ylim = c(0,50), lwd = 3)
-      for (p in 1:length(q.hat)){
-        if (!is.na(as.numeric(q.hat[p]))){
-          lines(X[,p], col = p+1)    
-        }}}
     
     # Determine which sources have downwind sensors (i.e., which sources have information)
     info.mask <- apply(X, 2, function(this.col) sum(this.col > 0.25) > 4)
     
     # Save information / no information mask
-    q.hat[!info.mask] <-
-      q.hat.lower[!info.mask] <- q.hat.upper[!info.mask] <-
-      pis[!info.mask] <- q.hat.median[!info.mask] <- "no info"
+    q.hat[!info.mask] <- q.hat.lower[!info.mask] <- q.hat.upper[!info.mask] <-
+      zs[!info.mask] <- "no info"
     
     # Subset to just the sources with information
     X <- matrix(X[, info.mask], nrow = length(y))
     
     # If mostly zeros, set emission rate for sources with information to zero
-    # OLD VERSION THAT WAS TOO STRICT: if (all(y == 0)){
     if (sum(y > 0) < 5 & all(y[y > 0] < 1)){
       
-      q.hat[info.mask] <-
-        q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
-        pis[info.mask] <- q.hat.median[info.mask] <- 0
+      q.hat[info.mask] <- q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
+        zs[info.mask] <- 0
       
     } else {
-      
-      # Determine which sources have overlap between simulated enhancements and enhancements in observations
-      dot <- as.vector(crossprod(y, X))
-      norm2 <- colSums(X^2, na.rm = T)
-      q.max <- 2 * dot / norm2
-      overlap.mask <- q.max > (0.1 / 3.6) # q of at least 0.1 kg/hr
-      
-      # Save overlap / no overlap mask
-      q.hat[info.mask][!overlap.mask] <-
-        q.hat.lower[info.mask][!overlap.mask] <- q.hat.upper[info.mask][!overlap.mask] <-
-        pis[info.mask][!overlap.mask] <- q.hat.median[info.mask][!overlap.mask] <- "no overlap"
-      
-      # Subset to just the sources with overlap
-      X <- matrix(X[, overlap.mask], nrow = length(y))
       
       # Run the MDLQ model if any sources are left
       if (ncol(X) > 0){
         
-        # q.hat[info.mask] <-
-        #   q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
-        #   pis[info.mask] <- q.hat.median[info.mask] <- "invert"
-        
         out <- tryCatch(
           { out <- run.mdlq.mcmc(y=y, X=X,
-                                 n.samples = 750,
+                                 n.samples = 1750,
                                  n.burn.in = 250)
           }, error = function(msg){
             out <- "DNC"
@@ -213,44 +186,34 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
         
         # catch any errors
         if (length(out) == 1){
-          q.hat[info.mask][overlap.mask] <-
-            q.hat.lower[info.mask][overlap.mask] <-
-            q.hat.upper[info.mask][overlap.mask] <-
-            pis[info.mask][overlap.mask] <-
-            q.hat.median[info.mask][overlap.mask] <- out
+          q.hat[info.mask] <- q.hat.lower[info.mask] <- q.hat.upper[info.mask] <-
+            zs[info.mask] <- out
           
           # Save output
         } else {
           these.rates <- out[, colnames(out) %in% paste0("beta", 1:ncol(X))]
-          these.pis   <- out[, colnames(out) %in% paste0("pi",   1:ncol(X))]
+          these.zs   <- out[, colnames(out) %in% paste0("z",   1:ncol(X))]
+          these.rs    <- out[, colnames(out) == "r"]
           
           these.rates <- as.matrix(these.rates, ncol = ncol(X))
-          these.pis   <- as.matrix(these.pis,   ncol = ncol(X))
+          these.zs   <- as.matrix(these.zs,   ncol = ncol(X))
           
-          q.hat[info.mask][overlap.mask]       <- apply(these.rates, 2, mean) * 3.6
-          q.hat.lower[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.025)) * 3.6
-          q.hat.upper[info.mask][overlap.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.975)) * 3.6
+          q.hat[info.mask]       <- apply(these.rates, 2, mean) * 3.6
+          q.hat.lower[info.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.025)) * 3.6
+          q.hat.upper[info.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.975)) * 3.6
           
-          pis[info.mask][overlap.mask] <- apply(these.pis, 2, mean)
-          
-          q.hat.median[info.mask][overlap.mask] <- apply(these.rates, 2, median) * 3.6
+          zs[info.mask] <- apply(these.zs, 2, mean)
           
         } # End if to check for MCMC convergence
       } # End if to check if there are any columns of X left
     } # End if to check for enhancements in observations
     
-    if(F){
-      plot(y, type = "l", ylim = c(0,30), lwd = 3)
-      counter <- 1
-      for (p in 1:length(q.hat)){
-        if (!is.na(as.numeric(q.hat[p]))){
-          lines(X[,counter] * as.numeric(q.hat[p])/3.6, col = p+1)    
-          counter <- counter + 1
-        }}}
     
     # Save output
     to.save <- list(q.hat = q.hat, q.hat.lower = q.hat.lower, q.hat.upper = q.hat.upper,
-                    pis = pis, q.hat.median = q.hat.median, rates = these.rates * 3.6, q.max = q.max)
+                    zs = zs, rates = these.rates * 3.6, rs = these.rs,
+                    interval.start = times[min(sub.mask)], 
+                    interval.end = times[max(sub.mask)])
     
     to.save
     
@@ -265,16 +228,12 @@ stopCluster(cl)
 
 # Package up MDLQ results
 to.save <- c(list(times = times,
-                  obs = obs,
                   source.names = source.names,
-                  WD = data$WD,
-                  WS = data$WS,
                   out = big.out),
              sims)
 
 # Save results
 saveRDS(to.save, output.file.path)
-
 
 # End code timer
 code.stop.time <- Sys.time() 
