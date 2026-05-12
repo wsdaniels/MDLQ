@@ -39,6 +39,9 @@ output.file.path <- paste0('../output_data/MDLQ_output_',
                            interval.length, 'min_interval_',
                            interval.length, 'min_step_SAMPLE.RData')
 
+# Location to save forward simulations
+sim.save.path <- paste0('../output_data/forward_simulations_SAMPLE.RData')
+
 # Path to helper file that contains the Gibbs updates for the MDLQ model
 spike.slab.regression.path <- '../code/HELPER_MCMC.R'
 
@@ -227,13 +230,13 @@ stopCluster(cl)
 
 
 # Package up MDLQ results
-to.save <- c(list(times = times,
-                  source.names = source.names,
-                  out = big.out),
-             sims)
+to.save <- list(times = times,
+                source.names = source.names,
+                out = big.out)
 
 # Save results
 saveRDS(to.save, output.file.path)
+saveRDS(sims, sim.save.path)
 
 # End code timer
 code.stop.time <- Sys.time() 

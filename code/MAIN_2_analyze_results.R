@@ -25,7 +25,7 @@ if (commandArgs()[1] == "RStudio"){
 # START USER INPUT
 #---------------------------------------------------------------------------
 
-run.sample <- F
+run.sample <- T
 
 # Size of the inversion window used to run the MDLQ
 interval.length <- 30
@@ -37,6 +37,10 @@ step.size <- 30
 data <- readRDS(paste0('../output_data/MDLQ_output_', 
                        interval.length, 'min_interval_', 
                        interval.length, 'min_step', ifelse(run.sample, "_SAMPLE", ""), '.RData'))
+
+# Location of forward simulations
+sims <- readRDS(paste0('../output_data/forward_simulations', 
+                       ifelse(run.sample, "_SAMPLE", ""), '.RData'))
 
 # Location of the METEC controlled release ground truth data
 leak.data <- readRDS('../input_data/ground_truth.RData')
@@ -53,12 +57,15 @@ info.mask.location <- paste0('../output_data/pregenerated_info_mask_',
                              interval.length, 'min_interval_', 
                              interval.length, 'min_step', ifelse(run.sample, "_SAMPLE", ""), '.RData')
 
-first.sim.ind <- 4
-
 
 
 # END OF USER INPUT - NO MODIFICATION NECESSARY BELOW THIS POINT
 #---------------------------------------------------------------------------
+
+# Clean up
+first.sim.ind <- length(data)+1
+data <- c(data, sims)
+rm(sims)
 
 # Set colors for plots
 tank.color <- "#3062CF" #blue
