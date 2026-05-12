@@ -1,8 +1,7 @@
 # Description: 
-# Summarizes event detection, localization, and quantification results and 
-# reproduces paper figures.
-# Author: William Daniels (wdaniels@mines.edu)
-# Last Updated: December 2024
+# Process and visualize MDLQ output
+# Author: William Daniels (wdanie16@jh.edu)
+# Last Updated: May 2026
 
 # Clear environment
 if(!is.null(dev.list())){dev.off()}
@@ -26,6 +25,8 @@ if (commandArgs()[1] == "RStudio"){
 # START USER INPUT
 #---------------------------------------------------------------------------
 
+run.sample <- F
+
 # Size of the inversion window used to run the MDLQ
 interval.length <- 30
 
@@ -33,31 +34,31 @@ interval.length <- 30
 step.size <- 30
 
 # Location of MDLQ output 
-# data <- readRDS('../output_data/MDLQ_output_ADED2024_30min_interval_30min_step_overlap_inf_no_avg.RData')
-data <- readRDS('../../archive/MDLQ/all_output_files/MDLQ_output_ADED2024_30min_interval_30min_step_overlap_fix.RData')
+data <- readRDS(paste0('../output_data/MDLQ_output_', 
+                       interval.length, 'min_interval_', 
+                       interval.length, 'min_step', ifelse(run.sample, "_SAMPLE", ""), '.RData'))
 
 # Location of the METEC controlled release ground truth data
-leak.data <- readRDS('../input_data/leak_data.RData')
+leak.data <- readRDS('../input_data/ground_truth.RData')
 
 # Generate ground truth data on 30-minute intervals (T), or read in a previously generated file (F)
 generate.truth <- F
-truth.location <- '../output_data/truth_ADED2024_30min_interval_30min_step.RData'
+truth.location <- paste0('../output_data/pregenerated_ground_truth_',
+                         interval.length, 'min_interval_', 
+                         interval.length, 'min_step', ifelse(run.sample, "_SAMPLE", ""), '.RData')
 
 # Generate info mask on 30-minute intervals (T), or read in a previously generated file (F)
 generate.info.mask <- F
-info.mask.location <- '../output_data/info_mask_ADED2024_30min_interval_30min_step.RData'
+info.mask.location <- paste0('../output_data/pregenerated_info_mask_',
+                             interval.length, 'min_interval_', 
+                             interval.length, 'min_step', ifelse(run.sample, "_SAMPLE", ""), '.RData')
 
-# Path to the forward model output
-forward.model.path <- '../input_data/forward_model_output_ADED2024.RData'
+first.sim.ind <- 4
 
-first.sim.ind <- 7
 
-interpolate.flag <- T
 
 # END OF USER INPUT - NO MODIFICATION NECESSARY BELOW THIS POINT
 #---------------------------------------------------------------------------
-
-
 
 # Set colors for plots
 tank.color <- "#3062CF" #blue
@@ -69,18 +70,16 @@ wellhead.west.color <- "#C7383C" #red
 cols <- c(wellhead.west.color, separator.west.color, tank.color, wellhead.east.color, separator.east.color)
 
 
-
-
-
-
 # STEP 1: PARSE OUT RESULTS
 #---------------------------------------------------------------------------
 
-# Read in the forward model output
-orig.data <- readRDS(forward.model.path)
-
 # Parse out source names
 source.names <- data$source.names
+
+# Find missing data and label it as such
+to.replace <- which(sapply(data$out, length) == 1)
+data$out[to.replace] <- list(rep("NA y", 7))
+q.hat.lower <- vector(mode = "list", length = length(data$out))
 
 q.hat <- lapply(data$out, function(X) X[[1]])
 q.hat <- do.call(rbind, q.hat)
@@ -91,11 +90,8 @@ q.hat.lower <- do.call(rbind, q.hat.lower)
 q.hat.upper <- lapply(data$out, function(X) X[[3]])
 q.hat.upper <- do.call(rbind, q.hat.upper)
 
-pis <- lapply(data$out, function(X) X[[4]])
-pis <- do.call(rbind, pis)
-
-q.hat.median <- lapply(data$out, function(X) X[[5]])
-q.hat.median <- do.call(rbind, q.hat.median)
+zs <- lapply(data$out, function(X) X[[4]])
+zs <- do.call(rbind, zs)
 
 
 sum(q.hat == 0)/(nrow(q.hat)*ncol(q.hat))
@@ -107,8 +103,8 @@ sum(q.hat == "DNC")/(nrow(q.hat)*ncol(q.hat))
 sum(q.hat == "NA y")/(nrow(q.hat)*ncol(q.hat))
 
 
-ni.mask <- q.hat == "no info" | q.hat == "no overlap"
-dnc.mask <- q.hat == "broke on betas" | q.hat == "DNC" | q.hat == "decreasing betas"
+ni.mask <- q.hat == "no info" | q.hat == "no overlap" | q.hat == "NA y"
+dnc.mask <- q.hat == "broke on betas" | q.hat == "DNC" | q.hat == "decreasing betas" 
 
 q.hat[q.hat == "no info"] <- NA
 q.hat[q.hat == "broke on betas"] <- NA
@@ -134,32 +130,22 @@ q.hat.upper[q.hat.upper == "DNC"] <- NA
 q.hat.upper[q.hat.upper == "NA y"] <- NA
 q.hat.upper <- matrix(as.numeric(q.hat.upper), ncol = ncol(q.hat.upper))
 
-pis[pis == "no info"] <- NA
-pis[pis == "broke on betas"] <- NA
-pis[pis == "decreasing betas"] <- NA
-pis[pis == "no overlap"] <- NA
-pis[pis == "DNC"] <- NA
-pis[pis == "NA y"] <- NA
-pis <- matrix(as.numeric(pis), ncol = ncol(pis))
+zs[zs == "no info"] <- NA
+zs[zs == "broke on betas"] <- NA
+zs[zs == "decreasing betas"] <- NA
+zs[zs == "no overlap"] <- NA
+zs[zs == "DNC"] <- NA
+zs[zs == "NA y"] <- NA
+zs <- matrix(as.numeric(zs), ncol = ncol(zs))
 
-q.hat.median[q.hat.median == "no info"] <- NA
-q.hat.median[q.hat.median == "broke on betas"] <- NA
-q.hat.median[q.hat.median == "decreasing betas"] <- NA
-q.hat.median[q.hat.median == "no overlap"] <- NA
-q.hat.median[q.hat.median == "DNC"] <- NA
-q.hat.median[q.hat.median == "NA y"] <- NA
-q.hat.median <- matrix(as.numeric(q.hat.median), ncol = ncol(q.hat.median))
-
-
-if (interpolate.flag){
-  q.hat <- na.approx(q.hat)
-  q.hat.lower <- na.approx(q.hat.lower)
-  q.hat.upper <- na.approx(q.hat.upper)
-  
+mcmc <- vector(mode = "list", length = length(data$out))
+for (i in 1:length(data$out)){
+  if (length(names(data$out[[i]])) == 0){
+    mcmc[[i]] <- "NA y"
+  } else {
+    mcmc[[i]] <- data$out[[i]]$rates
+  }
 }
-
-
-mcmc <- lapply(data$out, function(X) X[[6]])
 
 # Some intervals subset to only the sources with downwind sensors.
 # This results in matrices of different dimensions.
@@ -219,16 +205,6 @@ leak.data.mat <- as.matrix(leak.data[,c(3:7)])
 #---------------------------------------------------------------------------
 
 if (generate.info.mask){
-  # for (i in 1:num.intervals){
-  #   print(paste0(i, "/", num.intervals))
-  #   # scale.factors <- q.hat[i, ]/3.6
-  #   time.mask <- seq((i-1)*step.size + 1,
-  #                    (i-1)*step.size + interval.length)
-  #   for (j in 1:length(source.names)){
-  #     # sims[[j]][time.mask, ] <- sims[[j]][time.mask, ] * scale.factors[j]
-  #     sims[[j]][time.mask, ] <- sims[[j]][time.mask, ] 
-  #   }
-  # }
   info.mask <- create.info.mask(times, sims)
   saveRDS(info.mask, info.mask.location)
 } else {
@@ -342,46 +318,24 @@ for (i in 1:length(source.names)){
 
 
 
-
 # STEP 8: CREATE INVENTORY AND ALERT RESULTS FIGURE ON ENTIRE DATASET
 #---------------------------------------------------------------------------
 
 # Take samples from the posterior of the betas to create distribution of inventory estimates
-n.samples <- 4000
+n.samples <- 1000
 samples <- array(NA, dim = c(nrow(q.hat), ncol(q.hat), n.samples))
 na.mask <- ni.mask | dnc.mask
 
-if (interpolate.flag){
-  
-  # USE WHEN INTERPOLATING
-  for (i in 1:ncol(q.hat)){
-    for (j in 1:nrow(q.hat)){
-      if (is.na(q.hat[j,i])){
-        samples[j,i, ] <- sample(na.omit(q.hat[,i]), n.samples, replace = T)
-      } else if (na.mask[j,i]){
-        samples[j,i, ] <- q.hat[j,i]
-      } else if (q.hat[j,i] == 0){
-        samples[j,i, ] <- 0
-      } else {
-        samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
-      }
+for (i in 1:ncol(q.hat)){
+  for (j in 1:nrow(q.hat)){
+    if (is.na(q.hat[j,i])){
+      samples[j,i, ] <- sample(na.omit(q.hat[,i]), n.samples, replace = T)
+    } else if (q.hat[j,i] == 0){
+      samples[j,i, ] <- 0
+    } else {
+      samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
     }
   }
-} else {
-  
-  # USE WHEN NOT INTERPOLATING
-  for (i in 1:ncol(q.hat)){
-    for (j in 1:nrow(q.hat)){
-      if (is.na(q.hat[j,i])){
-        samples[j,i, ] <- sample(na.omit(q.hat[,i]), n.samples, replace = T)
-      } else if (q.hat[j,i] == 0){
-        samples[j,i, ] <- 0
-      } else {
-        samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
-      }
-    }
-  }
-  
 }
 
 # Sum over the inversion windows
@@ -395,36 +349,6 @@ site.total <- sum(equip.sum)
 site.total.lower <- sum(equip.sum.lower)
 site.total.upper <- sum(equip.sum.upper)
 
-# OLD VERSION THAT IS NOT BASED ON SAMPLES
-if (F){
-  
-  to.remove <- rep(F, length(q.hat.total))
-  
-  q.hat.avg.outlier.removed <- q.hat.avg[!to.remove,]*step.size/60/1000
-  q.hat.lower.avg.outlier.removed <- q.hat.lower.avg[!to.remove,]*step.size/60/1000
-  q.hat.upper.avg.outlier.removed <- q.hat.upper.avg[!to.remove,]*step.size/60/1000
-  
-  for (i in 1:length(source.names)){
-    to.add.avg <- is.na(q.hat.avg.outlier.removed[,i])
-    q.hat.avg.outlier.removed[to.add.avg, i] <- mean(q.hat.avg.outlier.removed[, i], na.rm = T)
-    
-    to.add.avg <- is.na(q.hat.lower.avg.outlier.removed[,i])
-    q.hat.lower.avg.outlier.removed[to.add.avg, i] <- mean(q.hat.lower.avg.outlier.removed[, i], na.rm = T)
-    
-    to.add.avg <- is.na(q.hat.upper.avg.outlier.removed[,i])
-    q.hat.upper.avg.outlier.removed[to.add.avg, i] <- mean(q.hat.upper.avg.outlier.removed[, i], na.rm = T)
-  }
-  
-  equip.sum <- apply(q.hat.avg.outlier.removed, 2, sum)
-  equip.sum.lower <- apply(q.hat.lower.avg.outlier.removed, 2, sum)
-  equip.sum.upper <- apply(q.hat.upper.avg.outlier.removed, 2, sum)
-  
-  site.total <- sum(equip.sum)
-  site.total.lower <- sum(equip.sum.lower)
-  site.total.upper <- sum(equip.sum.upper)
-  
-}
-
 equip.sum.truth <- apply(truth, 2, sum)*step.size/60/1000
 site.total.truth <- sum(equip.sum.truth)
 
@@ -435,13 +359,10 @@ to.plot.upper <- c(equip.sum.upper, site.total.upper)
 
 
 png('../figures/loc_quant_results.png',
-    res = 100, pointsize = 30, width = 1920, height = 1080*0.625)
+    res = 100, pointsize = 32, width = 1920, height = 1080*0.625)
 
 par(mfrow = c(1,3))
-
 par(mar = c(3,3,2,1))
-
-par(mfrow = c(1,3))
 par(mgp = c(2, 0.75, 0))
 
 this.order <- order(to.plot, decreasing = T)
@@ -458,7 +379,7 @@ total.error.abs <- to.plot - to.plot.truth
 total.error <- round(100* (to.plot - to.plot.truth) / to.plot.truth, 1)
 
 b <- barplot(to.plot[this.order], col = alpha(bar.cols[this.order], alpha.val), 
-             ylim = c(0,3),
+             ylim = c(0,ifelse(run.sample, 0.25, 3)),
              border = NA, ylab = "Total emissions [metric tons]")
 
 adj.val <- 0.5
@@ -489,7 +410,7 @@ hist(error, xlim = c(-6,6), breaks = seq(-999,999, by = 0.5), xaxt = "n",
      yaxt = "n",
      ylab = "Frequency [thousands]",
      xlab = "",
-     ylim= c(0,1500))
+     ylim= c(0,ifelse(run.sample, 250, 1500)))
 axis(side = 1, at = seq(-6,6, by = 2))
 segments(x0 = mean(error, na.rm = T), y0 = -999, y1 = 99999, lwd = 4, col = line.col)
 segments(x0 = quantile(error, probs = c(0.025, 0.975), na.rm = T), 
@@ -504,7 +425,7 @@ is.emitting <- truth > 0
 # Determine estimated emission state (on / off)
 est.emitting <- matrix(NA, nrow = nrow(is.emitting), ncol = ncol(is.emitting))
 for (i in 1:5){
-  est.emitting[,i] <- pis[,i] > mean(pis[,i], na.rm = T)
+  est.emitting[,i] <- zs[,i] > mean(zs[,i], na.rm = T)
 }
 est.emitting[q.hat == 0] <- F
 
@@ -523,30 +444,33 @@ to.plot <- table(num.correct.vec)
 b <- barplot(to.plot,  yaxt = "n",
              col = alpha(mako(7)[1:6], 1),
              border = NA,
-             ylim = c(0,1500),
+             ylim = c(0,ifelse(run.sample, 250, 1500)),
              main = round(mean(num.correct.vec, na.rm = T), 2),
              ylab = "Frequency [thousands]")
 
 axis(side = 1, at = b, labels = NA)
 axis(side = 2, at = seq(0,1500, by = 500), labels = seq(0,1.5, by = 0.5))
 text(x = b,
-     y = to.plot+50,
+     y = to.plot+ifelse(run.sample, 10, 65),
      labels = paste0(round(100*percent, 1), "%"),
      offset = 5,
      xpd = NA)
-
 
 dev.off()
 
 
 
+
 source.names
-round(total.error.abs, 1)
+round(total.error.abs, 2)
 total.error
 round(mean(error, na.rm = T), 2)
 round(IQR(error, na.rm = T), 2)
-round(coverage, 2)
+round(coverage, 3)
 round(mean(num.correct.vec, na.rm = T), 2)
+
+quantile(error, probs = c(0.025, 0.975), na.rm = T)
+
 
 for (i in 1:ncol(est.emitting)){
   
@@ -614,502 +538,243 @@ matrix(c("site-level",                  sum(site.level.is.emitting),            
        nrow = 4, byrow = T)
 
 
-if (F){
-  
-  
-  # STEP 5: CREATE LOCALIZATION AND QUANTIFICATION RESULTS FIGURE
-  #---------------------------------------------------------------------------
-  
-  to.remove <- !info.to.use
-  
-  mcmc.correct.dim <- mcmc.correct.dim[!to.remove]
-  
-  q.hat.tmp <- q.hat[!to.remove, ]
-  
-  n.samples <- 4000
-  samples <- array(NA, dim = c(nrow(q.hat.tmp), ncol(q.hat.tmp), n.samples))
-  
-  na.mask.tmp <- na.mask[!to.remove, ]
-  
-  # USE WHEN INTERPOLATING
-  for (i in 1:ncol(q.hat.tmp)){
-    for (j in 1:nrow(q.hat.tmp)){
-      
-      if (is.na(q.hat.tmp[j,i])){
-        samples[j,i, ] <- sample(na.omit(q.hat.tmp[,i]), n.samples, replace = T)
-      } else if (na.mask.tmp[j,i]){
-        samples[j,i, ] <- q.hat.tmp[j,i]
-      } else if (q.hat.tmp[j,i] == 0){
-        samples[j,i, ] <- 0
-      } else {
-        samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
-      } 
+
+
+
+# STEP 5: CREATE LOCALIZATION AND QUANTIFICATION RESULTS FIGURE
+#---------------------------------------------------------------------------
+
+to.remove <- !info.to.use
+mcmc.correct.dim <- mcmc.correct.dim[!to.remove]
+q.hat.tmp <- q.hat[!to.remove, ]
+
+n.samples <- 1000
+samples <- array(NA, dim = c(nrow(q.hat.tmp), ncol(q.hat.tmp), n.samples))
+
+na.mask.tmp <- na.mask[!to.remove, ]
+
+
+for (i in 1:ncol(q.hat.tmp)){
+  for (j in 1:nrow(q.hat.tmp)){
+    if (is.na(q.hat.tmp[j,i])){
+      samples[j,i, ] <- sample(na.omit(q.hat.tmp[,i]), n.samples, replace = T)
+    } else if (q.hat.tmp[j,i] == 0){
+      samples[j,i, ] <- 0
+    } else {
+      samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
     }
   }
-  
-  # USE WHEN NOT INTERPOLATING
-  # for (i in 1:ncol(q.hat.tmp)){
-  #   for (j in 1:nrow(q.hat.tmp)){
-  #     if (is.na(q.hat.tmp[j,i])){
-  #       samples[j,i, ] <- sample(na.omit(q.hat.tmp[,i]), n.samples, replace = T)
-  #     } else if (q.hat.tmp[j,i] == 0){
-  #       samples[j,i, ] <- 0
-  #     } else {
-  #       samples[j,i, ] <- sample(mcmc.correct.dim[[j]][,i], n.samples, replace = T)
-  #     }
-  #   }
-  # }
-  
-  inventory.samples <- t(apply(samples, c(2,3), sum))*step.size/60/1000
-  
-  equip.sum <- apply(inventory.samples, 2, mean)
-  equip.sum.lower <- apply(inventory.samples, 2, function(X) quantile(X, probs = 0.025))
-  equip.sum.upper <- apply(inventory.samples, 2, function(X) quantile(X, probs = 0.975))
-  
-  # OLD VERSION THAT IS NOT BASED ON SAMPLING
-  if (F){
-    
-    q.hat.avg.outlier.removed <- q.hat.avg[!to.remove,]*step.size/60/1000
-    q.hat.lower.avg.outlier.removed <- q.hat.lower.avg[!to.remove,]*step.size/60/1000
-    q.hat.upper.avg.outlier.removed <- q.hat.upper.avg[!to.remove,]*step.size/60/1000
-    
-    for (i in 1:length(source.names)){
-      to.add.avg <- is.na(q.hat.avg.outlier.removed[,i])
-      q.hat.avg.outlier.removed[to.add.avg, i] <- mean(q.hat.avg.outlier.removed[, i], na.rm = T)
-      
-      to.add.avg <- is.na(q.hat.lower.avg.outlier.removed[,i])
-      q.hat.lower.avg.outlier.removed[to.add.avg, i] <- mean(q.hat.lower.avg.outlier.removed[, i], na.rm = T)
-      
-      to.add.avg <- is.na(q.hat.upper.avg.outlier.removed[,i])
-      q.hat.upper.avg.outlier.removed[to.add.avg, i] <- mean(q.hat.upper.avg.outlier.removed[, i], na.rm = T)
-    }
-    
-    equip.sum <- apply(q.hat.avg.outlier.removed, 2, sum)
-    equip.sum.lower <- apply(q.hat.lower.avg.outlier.removed, 2, sum)
-    equip.sum.upper <- apply(q.hat.upper.avg.outlier.removed, 2, sum)
-    
-  }
-  
-  q.hat.total.info.filtered <- apply(q.hat.avg[!to.remove, ], 1, sum)
-  truth.total.info.filtered <- apply(truth[!to.remove, ], 1, sum)
-  
-  site.total <- sum(equip.sum)
-  site.total.lower <- sum(equip.sum.lower)
-  site.total.upper <- sum(equip.sum.upper)
-  
-  equip.sum.truth <- apply(truth[!to.remove, ], 2, sum)*step.size/60/1000
-  site.total.truth <- sum(equip.sum.truth)
-  
-  to.plot <- c(equip.sum, site.total)
-  to.plot.truth <- c(equip.sum.truth, site.total.truth)
-  to.plot.lower <- c(equip.sum.lower, site.total.lower)
-  to.plot.upper <- c(equip.sum.upper, site.total.upper)
-  
-  
-  png('../figures/loc_quant_results_info_adjusted.png',
-      res = 100, pointsize = 30, width = 1920, height = 1080*0.625)
-  
-  par(mfrow = c(1,3))
-  
-  par(mar = c(3,3,2,1))
-  
-  par(mfrow = c(1,3))
-  par(mgp = c(2, 0.75, 0))
-  
-  this.order <- order(to.plot, decreasing = T)
-  
-  alpha.val <- 0.5
-  bar.cols <- c(wellhead.west.color,
-                separator.west.color,
-                tank.color, 
-                wellhead.east.color, 
-                separator.east.color,
-                "black")
-  
-  total.error <- round(100* (to.plot - to.plot.truth) / to.plot.truth, 1)
-  
-  b <- barplot(to.plot[this.order], col = alpha(bar.cols[this.order], alpha.val), 
-               ylim = c(0,0.3),
-               border = NA, ylab = "Total emissions [metric tons]")
-  
-  adj.val <- 0.5
-  segments(x0 = b-adj.val, x1 = b+adj.val, y0 = to.plot.truth[this.order],
-           col = bar.cols[this.order], lwd = 6)
-  
-  segments(x0 = b, y0 = to.plot.lower[this.order], y1 = to.plot.upper[this.order], lwd = 2)
-  
-  
-  legend("right", c("West Wellhead", "West Separator", "Tank", "East Wellhead", "East Separator", "Site Total")[this.order],
-         fill = bar.cols[this.order], box.lwd = NA)
-  
-  legend("topright", c("Truth (line)", "Estimate (box)"),
-         lwd = c(6, NA), fill = c(NA, alpha("black", alpha.val)),
-         box.col = "white", border = c("white", "black"))
-  
-  text(x = b-0.25,
-       y = -0.02,
-       labels = trimws(paste0(format(total.error[this.order], nsmall = 1), "%")),
-       offset = 5,
-       srt = 25,
-       cex = 0.95,
-       xpd = NA)
-  
-  line.col <- "steelblue4"
-  
-  error <- q.hat.total.info.filtered - truth.total.info.filtered
-  hist(error, xlim = c(-6,6), breaks = seq(-999,999, by = 0.5), xaxt = "n",
-       yaxt = "n",
-       ylab = "Frequency",
-       xlab = "",
-       ylim= c(0,200))
-  axis(side = 1, at = seq(-6,6, by = 2))
-  segments(x0 = mean(error, na.rm = T), y0 = -999, y1 = 99999, lwd = 4, col = line.col)
-  segments(x0 = quantile(error, probs = c(0.025, 0.975), na.rm = T), 
-           y0 = -999, y1 = 99999, lwd = 4, col = line.col, lty = 2)
-  axis(side = 2, at = seq(0,200, by = 50))
-  
-  
-  # Determine true emission state (on / off)
-  is.emitting <- truth > 0
-  
-  # Determine estimated emission state (on / off)
-  est.emitting <- matrix(NA, nrow = nrow(is.emitting), ncol = ncol(is.emitting))
-  for (i in 1:5){
-    est.emitting[,i] <- pis[,i] > mean(pis[,i], na.rm = T)
-  }
-  est.emitting[q.hat == 0] <- F
-  
-  # Figure out the number of correct localization estimates per release
-  num.correct <- matrix(NA, nrow = nrow(is.emitting), ncol = length(source.names))
-  for (i in 1:nrow(is.emitting)){
-    num.correct[i,] <- (is.emitting[i, ] & est.emitting[i,]) | (!is.emitting[i, ] & !est.emitting[i,])
-  }
-  
-  
-  # Format as table and percent
-  num.correct.vec <- apply(num.correct, 1, sum)
-  num.correct.vec <- num.correct.vec[!to.remove]
-  
-  percent <- table(num.correct.vec) / sum(!is.na(num.correct.vec))
-  to.plot <- table(num.correct.vec)
-  
-  b <- barplot(to.plot,  yaxt = "n",
-               col = alpha(mako(7)[1:6], 1),
-               border = NA,
-               ylim = c(0,200),
-               main = round(mean(num.correct.vec, na.rm = T), 2),
-               ylab = "Frequency")
-  
-  axis(side = 1, at = b, labels = NA)
-  axis(side = 2, at = seq(0,200, by = 50))
-  text(x = b,
-       y = to.plot+5,
-       labels = paste0(round(100*percent, 1), "%"),
-       offset = 5,
-       xpd = NA)
-  
-  dev.off()
-  
-  
-  
-  
-  
-  
-  # STEP 7: CREATE RESULT TIME SERIES AND DATA EXAMPLE FIGURES
-  #---------------------------------------------------------------------------
-  
-  interval.times <- vector(length = num.intervals)
-  for (i in 1:num.intervals){
-    interval.times[i] <- get.times(i, step.size)[1]
-  }
-  interval.times <- as_datetime(interval.times, tz = "America/Denver")
-  
-  
-  png('../figures/result_time_series.png',
-      res = 100, pointsize = 24, width = 1920, height = 1080*0.9)
-  
-  par(mfrow = c(2,1))
-  par(mar = c(1.5,0,0,0))
-  par(oma = c(0.5,3.5,0.5,0.5))
-  par(mgp = c(2.5, 0.75, 0))
-  
-  truth.cum <- matrix(NA, nrow = nrow(truth), ncol = ncol(truth))
-  for (i in 1:nrow(truth)){
-    truth.cum[i, ] <- cumsum(truth[i, ])
-  }
-  
-  q.hat.cum <- matrix(NA, nrow = nrow(q.hat.avg), ncol = ncol(q.hat.avg))
-  for (i in 1:nrow(q.hat.cum)){
-    q.hat.cum[i, ] <- cumsum(q.hat.avg[i, ])
-  }
-  
-  # this.mask <- 1040:1770
-  this.mask <- 347:592
-  
-  ylim.max <- 10
-  
-  truth.alpha.val <- 0.8
-  plot(interval.times[this.mask], truth.cum[this.mask,1], type = "l", ylim = c(0,ylim.max), col = NA, xaxt= "n")
-  envelopePlot(x1 = interval.times[this.mask], y1 = rep(0, length(this.mask)), y2 = truth.cum[this.mask, 1],
-               lineCol = NA, col = alpha(cols[1], truth.alpha.val))
-  envelopePlot(x1 = interval.times[this.mask], y1 = truth.cum[this.mask, 1], y2 = truth.cum[this.mask, 2],
-               lineCol = NA, col = alpha(cols[2], truth.alpha.val))
-  envelopePlot(x1 = interval.times[this.mask], y1 = truth.cum[this.mask, 2], y2 = truth.cum[this.mask, 3],
-               lineCol = NA, col = alpha(cols[3], truth.alpha.val))
-  envelopePlot(x1 = interval.times[this.mask], y1 = truth.cum[this.mask, 3], y2 = truth.cum[this.mask, 4],
-               lineCol = NA, col = alpha(cols[4], truth.alpha.val))
-  envelopePlot(x1 = interval.times[this.mask], y1 = truth.cum[this.mask, 4], y2 = truth.cum[this.mask, 5],
-               lineCol = NA, col = alpha(cols[5], truth.alpha.val))
-  lines(interval.times[this.mask], truth.total[this.mask], lwd = 3)
-  mtext("Emission Rate [kg/hr]", side = 2, line = 2.25)
-  
-  alpha.val <- 0.8
-  plot(interval.times[this.mask], q.hat.cum[this.mask,1], col = NA, type = "l", ylim = c(0,ylim.max), xaxt = "n")
-  envelopePlot(x1 = interval.times[this.mask], y1 = rep(0, length(this.mask)),
-               y2 = ifelse(is.na(q.hat.cum[this.mask, 1]), 0, q.hat.cum[this.mask, 1]),
-               lineCol = NA, col = alpha(cols[1], alpha.val))
-  envelopePlot(x1 = interval.times[this.mask], y1 = ifelse(is.na(q.hat.cum[this.mask, 1]), 0, q.hat.cum[this.mask, 1]),
-               y2 = ifelse(is.na(q.hat.cum[this.mask, 2]), 0, q.hat.cum[this.mask, 2]),
-               lineCol = NA, col = alpha(cols[2], alpha.val))
-  envelopePlot(x1 = interval.times[this.mask], y1 = ifelse(is.na(q.hat.cum[this.mask, 2]), 0, q.hat.cum[this.mask, 2]),
-               y2 = ifelse(is.na(q.hat.cum[this.mask, 3]), 0, q.hat.cum[this.mask, 3]),
-               lineCol = NA, col = alpha(cols[3], alpha.val))
-  envelopePlot(x1 = interval.times[this.mask], y1 = ifelse(is.na(q.hat.cum[this.mask, 3]), 0, q.hat.cum[this.mask, 3]),
-               y2 = ifelse(is.na(q.hat.cum[this.mask, 4]), 0, q.hat.cum[this.mask, 4]),
-               lineCol = NA, col = alpha(cols[4], alpha.val))
-  envelopePlot(x1 = interval.times[this.mask], y1 = ifelse(is.na(q.hat.cum[this.mask, 4]), 0, q.hat.cum[this.mask, 4]),
-               y2 = ifelse(is.na(q.hat.cum[this.mask, 5]), 0, q.hat.cum[this.mask, 5]),
-               lineCol = NA, col = alpha(cols[5], alpha.val))
-  lines(interval.times[this.mask], truth.total[this.mask], lwd = 3)
-  
-  mtext("Emission Rate [kg/hr]", side = 2, line = 2.25)
-  
-  date.seq <- seq(round_date(interval.times[1], unit = "days"), 
-                  round_date(interval.times[length(interval.times)], unit = "days"),
-                  by = "1 day")
-  
-  axis(side = 1, 
-       at = date.seq,
-       labels = paste0(month.abb[month(date.seq)]," ", day(date.seq)))
-  
-  dev.off()
-  
-  
-  
-  leak.cum <- matrix(NA, nrow = nrow(leak.data.mat), ncol = ncol(leak.data.mat))
-  for (i in 1:nrow(leak.data.mat)){
-    leak.cum[i, ] <- cumsum(leak.data.mat[i, ])
-  }
-  
-  start.time <- as_datetime("2024-02-12T00:00:00", tz = "America/Denver")
-  end.time <- as_datetime("2024-02-12T23:50:00", tz = "America/Denver")
-  
-  this.int <- interval(start.time, end.time)
-  
-  min.freq <- seq(start.time, end.time, by = "1 min")
-  
-  leak.cum.min.freq <- matrix(nrow = length(min.freq), ncol = ncol(leak.cum))
-  
-  leak.data.subset <- leak.data[leak.data$start %within% this.int, ]
-  leak.cum.subset <- leak.cum[leak.data$start %within% this.int, ]
-  
-  for (i in 1:nrow(leak.cum.min.freq)){
-    
-    print(paste0(i, "/", nrow(leak.cum.min.freq)))
-    
-    for (j in 1:nrow(leak.data.subset)){
-      
-      this.leak.int <- interval(leak.data.subset$start[j],
-                                leak.data.subset$end[j])
-      
-      if (min.freq[i] %within% this.leak.int){
-        
-        leak.cum.min.freq[i, ] <- leak.cum.subset[j, ]
-      }
-    }
-  }
-  
-  leak.cum.min.freq[is.na(leak.cum.min.freq)] <- 0
-  
-  high.res.mask <- orig.data$times %within% this.int
-  low.res.mask <- interval.times %within% this.int
-  
-  png('../figures/data_example.png',
-      res = 100, pointsize = 24, width = 1920, height = 1080*0.75)
-  
-  par(mfcol = c(2,2))
-  par(mar = c(0.5,3.5,1.5,0.5))
-  par(oma = c(1.5,0,0,0))
-  par(mgp = c(2, 0.75, 0))
-  
-  ylim.max <- 8
-  
-  truth.alpha.val <- 0.8
-  plot(min.freq, leak.cum.min.freq[,1], type = "l", ylim = c(0,ylim.max), col = NA,
-       ylab = "Emission rate [kg/hr]", yaxt= "n", xpd = NA, xaxt = "n", xlab = "")
-  envelopePlot(x1 = min.freq, y1 = rep(0, length(min.freq)), y2 = leak.cum.min.freq[, 1],
-               lineCol = NA, col = alpha(cols[1], truth.alpha.val))
-  envelopePlot(x1 = min.freq, y1 = leak.cum.min.freq[, 1], y2 = leak.cum.min.freq[, 2],
-               lineCol = NA, col = alpha(cols[2], truth.alpha.val))
-  envelopePlot(x1 = min.freq, y1 = leak.cum.min.freq[, 2], y2 = leak.cum.min.freq[, 3],
-               lineCol = NA, col = alpha(cols[3], truth.alpha.val))
-  envelopePlot(x1 = min.freq, y1 = leak.cum.min.freq[, 3], y2 = leak.cum.min.freq[, 4],
-               lineCol = NA, col = alpha(cols[4], truth.alpha.val))
-  envelopePlot(x1 = min.freq, y1 = leak.cum.min.freq[, 4], y2 = leak.cum.min.freq[, 5],
-               lineCol = NA, col = alpha(cols[5], truth.alpha.val))
-  lines(min.freq, leak.cum.min.freq[,5], lwd = 3)
-  
-  axis(side = 2, at = seq(0,8, by = 2))
-  
-  lwd.val <- 2
-  
-  plot(times[high.res.mask], apply(orig.data$obs[high.res.mask, ], 1, max), type = "l",
-       ylab = "Methane concentration [ppm]", xaxt = "n", lwd = lwd.val,
-       xpd = NA, xlab = "", yaxt = "n")
-  axis(side = 2, at = seq(0,60, by= 15))
-  
-  date.seq <- seq(start.time, end.time+hours(4), by = "4 hours")
-  axis(side = 1, at = date.seq, labels = paste0(hour(date.seq), ":00"))
-  
-  plot(times[high.res.mask], orig.data$WS[high.res.mask], type = "l",
-       ylab = "Wind speed [m/s]", xaxt = "n", lwd = lwd.val, xpd = NA, xlab = "")
-  
-  plot(times[high.res.mask], orig.data$WD[high.res.mask], type = "l",
-       ylab = "Wind direction", lwd = lwd.val, xpd = NA,
-       yaxt = "n", xaxt = "n")
-  
-  axis(side = 2, at = c(0, pi/2, pi, 3*pi/2, 2*pi),
-       labels = c("W", "S", "E", "N", "W"))
-  
-  date.seq <- seq(start.time, end.time+hours(4), by = "4 hours")
-  axis(side = 1, at = date.seq, labels = paste0(hour(date.seq), ":00"))
-  
-  dev.off()
-  
-  
-  
-  png('../figures/data_example_full.png',
-      res = 100, pointsize = 24, width = 1920/1.25, height = 1080*1.5)
-  
-  par(mfrow = c(11,1))
-  par(mar = c(0.25,1.75,0.25,1.75))
-  par(oma = c(1.5,0,0,0))
-  par(mgp = c(2, 0.75, 0))
-  
-  ylim.max <- 8
-  
-  truth.alpha.val <- 0.8
-  plot(min.freq, leak.cum.min.freq[,1], type = "l", ylim = c(0,ylim.max), col = NA,
-       ylab = "", yaxt= "n", xpd = NA, xaxt = "n", xlab = "")
-  envelopePlot(x1 = min.freq, y1 = rep(0, length(min.freq)), y2 = leak.cum.min.freq[, 1],
-               lineCol = NA, col = alpha(cols[1], truth.alpha.val))
-  envelopePlot(x1 = min.freq, y1 = leak.cum.min.freq[, 1], y2 = leak.cum.min.freq[, 2],
-               lineCol = NA, col = alpha(cols[2], truth.alpha.val))
-  envelopePlot(x1 = min.freq, y1 = leak.cum.min.freq[, 2], y2 = leak.cum.min.freq[, 3],
-               lineCol = NA, col = alpha(cols[3], truth.alpha.val))
-  envelopePlot(x1 = min.freq, y1 = leak.cum.min.freq[, 3], y2 = leak.cum.min.freq[, 4],
-               lineCol = NA, col = alpha(cols[4], truth.alpha.val))
-  envelopePlot(x1 = min.freq, y1 = leak.cum.min.freq[, 4], y2 = leak.cum.min.freq[, 5],
-               lineCol = NA, col = alpha(cols[5], truth.alpha.val))
-  lines(min.freq, leak.cum.min.freq[,5], lwd = 3)
-  
-  axis(side = 2, at = seq(0,8, by = 2))
-  
-  mtext("True emission state [kg/hr]", side =3 , line = -1.15, cex = 0.65,
-        col = "black", adj = 0.025)
-  
-  lwd.val <- 2
-  
-  tmp.obs <- orig.data$obs[high.res.mask, ]
-  colnames(tmp.obs) <- c("East", "East-Central", "Northeast", "North", "South", "Southeast", "Southwest", "West", "West-Central", "Northwest")
-  
-  for (i in 1:ncol(tmp.obs)){
-    plot(times[high.res.mask], tmp.obs[,i], type = "l", ylim = c(0,65),
-         ylab = "", xaxt = "n", lwd = lwd.val,
-         xpd = NA, xlab = "", yaxt = "n")
-    axis(side = 4, at = seq(0,60, by= 15))
-    
-    mtext("Methane concentration\n[ppm]", side =3 , line = -2, cex = 0.65,
-          col = "black", adj = 0.985)
-    mtext(paste0("Sensor: ", colnames(tmp.obs[i])), side =3 , line = -1.15, cex = 0.65,
-          col = "black")
-  }
-  
-  date.seq <- seq(start.time, end.time+hours(4), by = "4 hours")
-  axis(side = 1, at = date.seq, labels = paste0(hour(date.seq), ":00"))
-  
-  dev.off()
-  
-  
-  
-  
-  # STEP 3: COMPUTE NUMBER OF ESTIMATES NEEDED FOR AVERAGE TO CONVERGE
-  #---------------------------------------------------------------------------
-  
-  # Number of MC samples
-  n.samples <- 5000
-  
-  # Variable to hold average error across MC samples
-  avg.error <- matrix(nrow = n.samples, ncol = length(q.hat.total))
-  
-  # Loop through number of emission events to average
-  for (i in 1:1000){
-    
-    print(paste0(i, "/", length(q.hat.total)))
-    
-    # Loop through MC samples
-    for (j in 1:n.samples){
-      
-      # Sample in events to average
-      these.ind <- sample.int(length(q.hat.total), size = i)
-      
-      # Compute error for each of the sampled events
-      this.error <- q.hat.total[these.ind] - truth.total[these.ind]
-      
-      # Compute average error
-      avg.error[j,i] <- mean(this.error, na.rm =T)
-      
-    }
-  }
-  
-  
-  png('../figures/num_to_average.png',
-      res = 100, pointsize = 24, width =1920, height = 1080)
-  
-  par(mfrow = c(1,1))
-  
-  par(mar = c(4,4,2,2))
-  par(mgp = c(2.5,1,0))
-  
-  lwd.val <- 3
-  cols <- c("#309E78", "#DA6001", "#7570B4", "#E82B8A")
-  
-  err.quantile <- apply(avg.error, 2, function(X) quantile(X, probs = c(0,0.025, 0.975, 1), na.rm = T))
-  
-  plot(apply(avg.error, 2, mean), yli = c(-3, 3), col = "white", ylab = "Average error [kg/hr]",
-       xlab = "Number of 30-minute inversion windows included in average",
-       xlim = c(0,600))
-  
-  envelopePlot(x1 = 1:1000, y1 = err.quantile[2, 1:1000], y2 = err.quantile[3, 1:1000],
-               col = alpha(cols[3], 0.25), lineCol = cols[3])
-  
-  lines(apply(avg.error, 2, mean), lwd = lwd.val + 1)
-  
-  lines(1:length(q.hat.total), err.quantile[1,], col = "gray55", lwd = lwd.val)
-  lines(1:length(q.hat.total), err.quantile[4,], col = "gray55", lwd = lwd.val)
-  
-  num.to.avg <- max(c(min(which(err.quantile[2, ] > -1)), min(which(err.quantile[3, ] < 1))))
-  
-  abline(h = c(-1,1), col = cols[2], lty = 2, lwd= lwd.val+1)
-  
-  abline(v = num.to.avg, col = cols[1],lty = 2, lwd = lwd.val+1)
-  
-  legend("topright", c("Average of average errors", "Inner 95% of average errors", "Min / max of average errors", "95% probability of average error being within [-1,1] kg/hr"),
-         col = c('black', cols[3], "gray55", cols[1]),
-         lty= c(1,1,1,2), bty = "n",
-         lwd = 5)
-  
-  dev.off()
-  
-  
 }
+
+
+inventory.samples <- t(apply(samples, c(2,3), sum))*step.size/60/1000
+
+equip.sum <- apply(inventory.samples, 2, mean)
+equip.sum.lower <- apply(inventory.samples, 2, function(X) quantile(X, probs = 0.025))
+equip.sum.upper <- apply(inventory.samples, 2, function(X) quantile(X, probs = 0.975))
+
+q.hat.total.info.filtered <- apply(q.hat.avg[!to.remove, ], 1, sum)
+truth.total.info.filtered <- apply(truth[!to.remove, ], 1, sum)
+
+site.total <- sum(equip.sum)
+site.total.lower <- sum(equip.sum.lower)
+site.total.upper <- sum(equip.sum.upper)
+
+equip.sum.truth <- apply(truth[!to.remove, ], 2, sum)*step.size/60/1000
+site.total.truth <- sum(equip.sum.truth)
+
+to.plot <- c(equip.sum, site.total)
+to.plot.truth <- c(equip.sum.truth, site.total.truth)
+to.plot.lower <- c(equip.sum.lower, site.total.lower)
+to.plot.upper <- c(equip.sum.upper, site.total.upper)
+
+
+png('../figures/loc_quant_results_info_adjusted.png',
+    res = 100, pointsize = 32, width = 1920, height = 1080*0.625)
+
+par(mfrow = c(1,3))
+
+par(mar = c(3,3,2,1))
+
+par(mfrow = c(1,3))
+par(mgp = c(2, 0.75, 0))
+
+this.order <- order(to.plot, decreasing = T)
+
+alpha.val <- 0.5
+bar.cols <- c(wellhead.west.color,
+              separator.west.color,
+              tank.color, 
+              wellhead.east.color, 
+              separator.east.color,
+              "black")
+
+total.error <- round(100* (to.plot - to.plot.truth) / to.plot.truth, 1)
+
+b <- barplot(to.plot[this.order], col = alpha(bar.cols[this.order], alpha.val), 
+             ylim = c(0,ifelse(run.sample, 0.08, 0.3)),
+             border = NA, ylab = "Total emissions [metric tons]")
+
+adj.val <- 0.5
+segments(x0 = b-adj.val, x1 = b+adj.val, y0 = to.plot.truth[this.order],
+         col = bar.cols[this.order], lwd = 6)
+
+segments(x0 = b, y0 = to.plot.lower[this.order], y1 = to.plot.upper[this.order], lwd = 2)
+
+text(x = b-0.25,
+     y = ifelse(run.sample, -0.0075,-0.02),
+     labels = trimws(paste0(format(total.error[this.order], nsmall = 1), "%")),
+     offset = 5,
+     srt = 25,
+     cex = 0.95,
+     xpd = NA)
+
+line.col <- "steelblue4"
+
+error <- q.hat.total.info.filtered - truth.total.info.filtered
+hist(error, xlim = c(-6,6), breaks = seq(-999,999, by = 0.5), xaxt = "n",
+     yaxt = "n",
+     ylab = "Frequency",
+     xlab = "",
+     ylim= c(0,ifelse(run.sample, 50, 200)))
+axis(side = 1, at = seq(-6,6, by = 2))
+segments(x0 = mean(error, na.rm = T), y0 = -999, y1 = 99999, lwd = 4, col = line.col)
+segments(x0 = quantile(error, probs = c(0.025, 0.975), na.rm = T), 
+         y0 = -999, y1 = 99999, lwd = 4, col = line.col, lty = 2)
+axis(side = 2, at = seq(0,200, by = 50))
+
+
+# Determine true emission state (on / off)
+is.emitting <- truth > 0
+
+# Determine estimated emission state (on / off)
+est.emitting <- matrix(NA, nrow = nrow(is.emitting), ncol = ncol(is.emitting))
+for (i in 1:5){
+  est.emitting[,i] <- zs[,i] > mean(zs[,i], na.rm = T)
+}
+est.emitting[q.hat == 0] <- F
+
+# Figure out the number of correct localization estimates per release
+num.correct <- matrix(NA, nrow = nrow(is.emitting), ncol = length(source.names))
+for (i in 1:nrow(is.emitting)){
+  num.correct[i,] <- (is.emitting[i, ] & est.emitting[i,]) | (!is.emitting[i, ] & !est.emitting[i,])
+}
+
+
+# Format as table and percent
+num.correct.vec <- apply(num.correct, 1, sum)
+num.correct.vec <- num.correct.vec[!to.remove]
+
+percent <- table(num.correct.vec) / sum(!is.na(num.correct.vec))
+if (length(percent) < 6){
+  percent <- c(0, percent)
+}
+
+to.plot <- table(num.correct.vec)
+if (length(to.plot) < 6){
+  to.plot <- c(0, to.plot)
+}
+
+b <- barplot(to.plot,  yaxt = "n",
+             col = alpha(mako(7)[1:6], 1),
+             border = NA,
+             ylim = c(0,ifelse(run.sample, 50, 250)),
+             main = round(mean(num.correct.vec, na.rm = T), 2),
+             ylab = "Frequency")
+
+axis(side = 1, at = b, labels = 0:5)
+axis(side = 2, at = seq(0,250, by = 50))
+text(x = b,
+     y = to.plot+ifelse(run.sample, 2, 10),
+     labels = paste0(round(100*percent, 1), "%"),
+     offset = 5,
+     xpd = NA)
+
+dev.off()
+
+
+
+# STEP 7: CREATE RESULT TIME SERIES AND DATA EXAMPLE FIGURES
+#---------------------------------------------------------------------------
+
+interval.times <- vector(length = num.intervals)
+for (i in 1:num.intervals){
+  interval.times[i] <- get.times(i, step.size)[1]
+}
+interval.times <- as_datetime(interval.times, tz = "America/Denver")
+
+
+png('../figures/result_time_series.png',
+    res = 100, pointsize = 24, width = 1920, height = 1080*0.9)
+
+par(mfrow = c(2,1))
+par(mar = c(1.5,0,0,0))
+par(oma = c(0.5,3.5,0.5,0.5))
+par(mgp = c(2.5, 0.75, 0))
+
+truth.cum <- matrix(NA, nrow = nrow(truth), ncol = ncol(truth))
+for (i in 1:nrow(truth)){
+  truth.cum[i, ] <- cumsum(truth[i, ])
+}
+
+q.hat.cum <- matrix(NA, nrow = nrow(q.hat.avg), ncol = ncol(q.hat.avg))
+for (i in 1:nrow(q.hat.cum)){
+  q.hat.cum[i, ] <- cumsum(q.hat.avg[i, ])
+}
+
+if (run.sample){
+  this.mask <- 1:344
+} else {
+  this.mask <- 347:592
+}
+ylim.max <- 10
+
+truth.alpha.val <- 0.8
+plot(interval.times[this.mask], truth.cum[this.mask,1], type = "l", ylim = c(0,ylim.max), col = NA, xaxt= "n")
+envelopePlot(x1 = interval.times[this.mask], y1 = rep(0, length(this.mask)), y2 = truth.cum[this.mask, 1],
+             lineCol = NA, col = alpha(cols[1], truth.alpha.val))
+envelopePlot(x1 = interval.times[this.mask], y1 = truth.cum[this.mask, 1], y2 = truth.cum[this.mask, 2],
+             lineCol = NA, col = alpha(cols[2], truth.alpha.val))
+envelopePlot(x1 = interval.times[this.mask], y1 = truth.cum[this.mask, 2], y2 = truth.cum[this.mask, 3],
+             lineCol = NA, col = alpha(cols[3], truth.alpha.val))
+envelopePlot(x1 = interval.times[this.mask], y1 = truth.cum[this.mask, 3], y2 = truth.cum[this.mask, 4],
+             lineCol = NA, col = alpha(cols[4], truth.alpha.val))
+envelopePlot(x1 = interval.times[this.mask], y1 = truth.cum[this.mask, 4], y2 = truth.cum[this.mask, 5],
+             lineCol = NA, col = alpha(cols[5], truth.alpha.val))
+lines(interval.times[this.mask], truth.total[this.mask], lwd = 3)
+mtext("Emission Rate [kg/hr]", side = 2, line = 2.25)
+
+alpha.val <- 0.8
+plot(interval.times[this.mask], q.hat.cum[this.mask,1], col = NA, type = "l", ylim = c(0,ylim.max), xaxt = "n")
+envelopePlot(x1 = interval.times[this.mask], y1 = rep(0, length(this.mask)),
+             y2 = ifelse(is.na(q.hat.cum[this.mask, 1]), 0, q.hat.cum[this.mask, 1]),
+             lineCol = NA, col = alpha(cols[1], alpha.val))
+envelopePlot(x1 = interval.times[this.mask], y1 = ifelse(is.na(q.hat.cum[this.mask, 1]), 0, q.hat.cum[this.mask, 1]),
+             y2 = ifelse(is.na(q.hat.cum[this.mask, 2]), 0, q.hat.cum[this.mask, 2]),
+             lineCol = NA, col = alpha(cols[2], alpha.val))
+envelopePlot(x1 = interval.times[this.mask], y1 = ifelse(is.na(q.hat.cum[this.mask, 2]), 0, q.hat.cum[this.mask, 2]),
+             y2 = ifelse(is.na(q.hat.cum[this.mask, 3]), 0, q.hat.cum[this.mask, 3]),
+             lineCol = NA, col = alpha(cols[3], alpha.val))
+envelopePlot(x1 = interval.times[this.mask], y1 = ifelse(is.na(q.hat.cum[this.mask, 3]), 0, q.hat.cum[this.mask, 3]),
+             y2 = ifelse(is.na(q.hat.cum[this.mask, 4]), 0, q.hat.cum[this.mask, 4]),
+             lineCol = NA, col = alpha(cols[4], alpha.val))
+envelopePlot(x1 = interval.times[this.mask], y1 = ifelse(is.na(q.hat.cum[this.mask, 4]), 0, q.hat.cum[this.mask, 4]),
+             y2 = ifelse(is.na(q.hat.cum[this.mask, 5]), 0, q.hat.cum[this.mask, 5]),
+             lineCol = NA, col = alpha(cols[5], alpha.val))
+lines(interval.times[this.mask], truth.total[this.mask], lwd = 3)
+
+mtext("Emission Rate [kg/hr]", side = 2, line = 2.25)
+
+date.seq <- seq(round_date(interval.times[1], unit = "days"), 
+                round_date(interval.times[length(interval.times)], unit = "days"),
+                by = "1 day")
+
+axis(side = 1, 
+     at = date.seq,
+     labels = paste0(month.abb[month(date.seq)]," ", day(date.seq)))
+
+dev.off()
+
+
+
+

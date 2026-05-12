@@ -1,11 +1,11 @@
 
-ss.regress <- function(y, X,
-                       a.vec = rep(1, ncol(X)), b.vec = rep(1, ncol(X)), # Hyper priors for theta_i's
-                       c.vec = rep(1, ncol(X)), d.vec = rep(1, ncol(X)), # Hyper priors for tau2_i's
-                       alpha1 = 1, alpha2 = 1, # Hyper priors on b
-                       p = 0.001,
-                       n.samples, n.burn.in = round(n.samples / 4, 0),
-                       plot.trace = F) {
+run.mdlq.mcmc <- function(y, X,
+                          a.vec = rep(1, ncol(X)), b.vec = rep(1, ncol(X)), # Hyper priors for theta_i's
+                          c.vec = rep(1, ncol(X)), d.vec = rep(1, ncol(X)), # Hyper priors for tau2_i's
+                          alpha1 = 1, alpha2 = 1, # Hyper priors on b
+                          p = 0.001,
+                          n.samples, n.burn.in = round(n.samples / 4, 0),
+                          plot.trace = F) {
   
   
   k <- ncol(X)
@@ -20,24 +20,16 @@ ss.regress <- function(y, X,
                      paste0('beta', seq(k)),
                      'b')
   
-  # accepted <- as.data.frame(res)
-  # accepted[is.na(accepted)] <- F
-  
   # take the MLE estimate as the values for the first sample
   m <- lm(y ~ X - 1)
   sigma.orig <- var(predict(m) - y)
   beta.orig <- ifelse(coef(m) > 0, coef(m), 0.25)
   beta.orig <- ifelse(beta.orig < 100, beta.orig, 10)
   res[1, ] <- c(rep(0, k), rep(1, k), rep(0.5, k), beta.orig, sigma.orig)
-  
   res[1, ] <- ifelse(is.na(res[1,]), 0.25, res[1,])
-  
-  probs <- vector(length = n.samples)
   
   # we start running the Gibbs sampler
   for (i in seq(2, n.samples)) {
-    
-    # print(paste0(i, "/", n.samples))
     
     # first, get all the values of the previous time point
     pi.prev <- res[i-1, seq(1, k)]
@@ -46,10 +38,8 @@ ss.regress <- function(y, X,
     beta.prev <- res[i-1, seq(3*k + 1, 4*k)]
     b.prev <- res[i-1, ncol(res)]
     
-    
     ## Start sampling from the conditional posterior distributions
     ##############################################################
-    
     
     theta.new <- vector(length = k)
     for (j in sample(seq(k))){
@@ -74,22 +64,14 @@ ss.regress <- function(y, X,
     }
     
     accept.prob <- exp(b.target(proposed.b) - b.target(b.prev))
-    
-    probs[i] <- accept.prob
-    
     if(runif(1) <= accept.prob) {
       b.new <- proposed.b
-      # accepted$b[i] <- T
     } else {
       b.new <- b.prev
-      # accepted$b[i] <- F
     }
     
-    
     for (j in sample(seq(k))){
-      
       if (pi.prev[j] == 1){
-        
         s.target <- function(s.vec){
           part1 <- log(pi.prev[j] * (1/s.vec[j]))
           part2 <- -beta.prev[j]/s.vec[j]
@@ -97,9 +79,7 @@ ss.regress <- function(y, X,
           part4 <- -d.vec[j]/s.vec[j]
           return(part1 + part2 + part3 + part4)
         }
-        
       } else {
-        
         s.target <- function(s.vec){
           part1 <- log( (1-pi.prev[j]) * (1/p) )
           part2 <- -beta.prev[j]/p
@@ -123,22 +103,16 @@ ss.regress <- function(y, X,
       proposed.s.vec[j] <- proposed.s
       
       accept.prob <- exp(s.target(proposed.s.vec) - s.target(s.prev))
-      
       if(runif(1) <= accept.prob) {
         s.prev[j] <- proposed.s
-        # accepted[i, 5+j] <- T
       } else {
         s.prev[j] <- s.prev[j]
-        # accepted[i, 5+j] <- F
       }
     }
     
     s.new <- s.prev
-    
     for (j in sample(seq(k))){
-      
       if (pi.prev[j] == 1){
-        
         beta.target <- function(beta.vec){
           part1 <- n * log( 1/(2*b.new) )
           part2 <- -sum( abs( y - X %*% beta.vec ) ) / b.new
@@ -146,9 +120,7 @@ ss.regress <- function(y, X,
           part4 <- -beta.vec[j] / s.new[j]
           return(part1 + part2 + part3 + part4)
         }
-        
       } else {
-        
         beta.target <- function(beta.vec){
           part1 <- n * log( 1/(2*b.new) )
           part2 <- -sum( abs( y - X %*% beta.vec ) ) / b.new
@@ -172,44 +144,31 @@ ss.regress <- function(y, X,
       proposed.beta.vec[j] <- proposed.beta
       
       accept.prob <- exp(beta.target(proposed.beta.vec) - beta.target(beta.prev))
-      
       if(runif(1) <= accept.prob) {
         beta.prev[j] <- proposed.beta
-        # accepted[i, 15+j] <- T
       } else {
         beta.prev[j] <- beta.prev[j]
-        # accepted[i, 15+j] <- F
       }
     }
     
     beta.new <- beta.prev
-    
     for (j in sample(seq(k))) {
-      
       pi.target <- function(pi.vec){
-        
         p0 <- (p^-1) * (1-theta.new[j]) * exp(-beta.new[j] / p)
         p1 <- (s.new[j]^-1) * theta.new[j] * exp(-beta.new[j] / s.new[j])
-        
         psi <- exp(log(p0) - log(p0 + p1))
-        
         return((1-psi)^pi.vec[j] * (psi)^(1-pi.vec[j]))
-        
       }
       
       proposed.pi <- rbinom(1,1,0.5)
-      
       proposed.pi.vec <- pi.prev
       proposed.pi.vec[j] <- proposed.pi
       
       accept.prob <- pi.target(proposed.pi.vec) / pi.target(pi.prev)
-      
       if(runif(1) <= accept.prob) {
         pi.prev[j] <- proposed.pi
-        # accepted[i, j] <- T
       } else {
         pi.prev[j] <- pi.prev[j]
-        # accepted[i, j] <- F
       }
     }
     
@@ -221,18 +180,14 @@ ss.regress <- function(y, X,
   
   out <- as.data.frame(res[-seq(n.burn.in), ])
   
-  # apply(accepted, 2, function(X) sum(X)/length(X))
-  
   if (F){
     
     par(mfrow = c(ceiling(ncol(out) / floor(ncol(out)/3)),
                   floor(ncol(out)/3)))
     par(mar = c(2,2,2,2))
-    
     for (i in 1:ncol(out)){
       plot(out[,i], type = "l", main = colnames(out)[i])
     }
-    
     par(mfrow = c(1,1))
   }
   

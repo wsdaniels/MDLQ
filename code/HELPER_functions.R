@@ -1,7 +1,6 @@
 
 remove.background <- function(obs, gap.time){
   
-  
   # Skip sensors that have only NA values
   to.use <- which(apply(obs, 2, function(X) !all(is.na(X))))
   
