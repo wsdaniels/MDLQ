@@ -31,8 +31,9 @@ interval.length <- 30
 # Set equal to "interval.length" to run on non-overlapping windows
 step.size <- 30
 
-# Path to output from atmospheric dispersion model
-forward.model.path <- '../input_data/input_data_SAMPLE.RData'
+# Path to input data object that contains forward simulations from atmospheric
+# transport model and CMS concentration observations
+input.file.path <- '../input_data/input_data_SAMPLE.RData'
 
 # Location to save MDLQ output
 output.file.path <- paste0('../output_data/MDLQ_output_',
@@ -66,7 +67,7 @@ source(spike.slab.regression.path)
 source(helper.function.path)
 
 # Read in simulation data
-data <- readRDS(forward.model.path)
+data <- readRDS(input.file.path)
 
 # Trim data so that they start and end at either the hour or half hour. 
 # This makes it so that all 30-minute intervals at aligned 
@@ -195,11 +196,11 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
           # Save output
         } else {
           these.rates <- out[, colnames(out) %in% paste0("beta", 1:ncol(X))]
-          these.zs   <- out[, colnames(out) %in% paste0("z",   1:ncol(X))]
+          these.zs    <- out[, colnames(out) %in% paste0("z",   1:ncol(X))]
           these.rs    <- out[, colnames(out) == "r"]
           
           these.rates <- as.matrix(these.rates, ncol = ncol(X))
-          these.zs   <- as.matrix(these.zs,   ncol = ncol(X))
+          these.zs    <- as.matrix(these.zs,    ncol = ncol(X))
           
           q.hat[info.mask]       <- apply(these.rates, 2, mean) * 3.6
           q.hat.lower[info.mask] <- apply(these.rates, 2, function(X) quantile(X, probs = 0.025)) * 3.6

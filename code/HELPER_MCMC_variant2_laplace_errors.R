@@ -14,7 +14,7 @@ run.mdlq.mcmc <- function(y, X,
   # res is where we store the posterior samples
   res <- matrix(NA, nrow = n.samples, ncol = 4*k + 1)
   
-  colnames(res) <- c(paste0('pi', seq(k)),
+  colnames(res) <- c(paste0('z', seq(k)),
                      paste0('s', seq(k)),
                      paste0('theta', seq(k)),
                      paste0('beta', seq(k)),
@@ -32,7 +32,7 @@ run.mdlq.mcmc <- function(y, X,
   for (i in seq(2, n.samples)) {
     
     # first, get all the values of the previous time point
-    pi.prev <- res[i-1, seq(1, k)]
+    z.prev <- res[i-1, seq(1, k)]
     s.prev <- res[i-1,seq(k + 1, 2*k)]
     theta.prev <- res[i-1, seq(2*k + 1, 3*k)]
     beta.prev <- res[i-1, seq(3*k + 1, 4*k)]
@@ -43,7 +43,7 @@ run.mdlq.mcmc <- function(y, X,
     
     theta.new <- vector(length = k)
     for (j in sample(seq(k))){
-      theta.new[j] <- rbeta(1, a.vec[j] + pi.prev[j], 1 - pi.prev[j] + b.vec[j])
+      theta.new[j] <- rbeta(1, a.vec[j] + z.prev[j], 1 - z.prev[j] + b.vec[j])
     }
     
     b.target <- function(b){
@@ -71,9 +71,9 @@ run.mdlq.mcmc <- function(y, X,
     }
     
     for (j in sample(seq(k))){
-      if (pi.prev[j] == 1){
+      if (z.prev[j] == 1){
         s.target <- function(s.vec){
-          part1 <- log(pi.prev[j] * (1/s.vec[j]))
+          part1 <- log(z.prev[j] * (1/s.vec[j]))
           part2 <- -beta.prev[j]/s.vec[j]
           part3 <- log( (1/s.vec[j])^(c.vec[j]+1) )
           part4 <- -d.vec[j]/s.vec[j]
@@ -81,7 +81,7 @@ run.mdlq.mcmc <- function(y, X,
         }
       } else {
         s.target <- function(s.vec){
-          part1 <- log( (1-pi.prev[j]) * (1/p) )
+          part1 <- log( (1-z.prev[j]) * (1/p) )
           part2 <- -beta.prev[j]/p
           part3 <- log( (1/s.vec[j])^(c.vec[j]+1) )
           part4 <- -d.vec[j]/s.vec[j]
@@ -112,7 +112,7 @@ run.mdlq.mcmc <- function(y, X,
     
     s.new <- s.prev
     for (j in sample(seq(k))){
-      if (pi.prev[j] == 1){
+      if (z.prev[j] == 1){
         beta.target <- function(beta.vec){
           part1 <- n * log( 1/(2*b.new) )
           part2 <- -sum( abs( y - X %*% beta.vec ) ) / b.new
@@ -153,28 +153,28 @@ run.mdlq.mcmc <- function(y, X,
     
     beta.new <- beta.prev
     for (j in sample(seq(k))) {
-      pi.target <- function(pi.vec){
+      z.target <- function(z.vec){
         p0 <- (p^-1) * (1-theta.new[j]) * exp(-beta.new[j] / p)
         p1 <- (s.new[j]^-1) * theta.new[j] * exp(-beta.new[j] / s.new[j])
         psi <- exp(log(p0) - log(p0 + p1))
-        return((1-psi)^pi.vec[j] * (psi)^(1-pi.vec[j]))
+        return((1-psi)^z.vec[j] * (psi)^(1-z.vec[j]))
       }
       
-      proposed.pi <- rbinom(1,1,0.5)
-      proposed.pi.vec <- pi.prev
-      proposed.pi.vec[j] <- proposed.pi
+      proposed.z <- rbinom(1,1,0.5)
+      proposed.z.vec <- z.prev
+      proposed.z.vec[j] <- proposed.z
       
-      accept.prob <- pi.target(proposed.pi.vec) / pi.target(pi.prev)
+      accept.prob <- z.target(proposed.z.vec) / z.target(z.prev)
       if(runif(1) <= accept.prob) {
-        pi.prev[j] <- proposed.pi
+        z.prev[j] <- proposed.z
       } else {
-        pi.prev[j] <- pi.prev[j]
+        z.prev[j] <- z.prev[j]
       }
     }
     
-    pi.new <- pi.prev
+    z.new <- z.prev
     
-    res[i, ] <- c(pi.new, s.new, theta.new, beta.new, b.new)
+    res[i, ] <- c(z.new, s.new, theta.new, beta.new, b.new)
     
   } # End Gibbs sampler
   

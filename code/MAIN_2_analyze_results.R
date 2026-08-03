@@ -25,6 +25,8 @@ if (commandArgs()[1] == "RStudio"){
 # START USER INPUT
 #---------------------------------------------------------------------------
 
+# Analyze the sample week where concentration data are available (T),
+# or analyze the entire experiment (F)
 run.sample <- T
 
 # Size of the inversion window used to run the MDLQ
@@ -325,7 +327,7 @@ for (i in 1:length(source.names)){
 
 
 
-# STEP 8: CREATE INVENTORY AND ALERT RESULTS FIGURE ON ENTIRE DATASET
+# STEP 7: CREATE INVENTORY AND ALERT RESULTS FIGURE ON ENTIRE DATASET
 #---------------------------------------------------------------------------
 
 # Take samples from the posterior of the betas to create distribution of inventory estimates
@@ -548,8 +550,8 @@ matrix(c("site-level",                  sum(site.level.is.emitting),            
 
 
 
-# STEP 5: CREATE LOCALIZATION AND QUANTIFICATION RESULTS FIGURE
-#---------------------------------------------------------------------------
+# STEP 8: CREATE LOCALIZATION AND QUANTIFICATION RESULTS FIGURE
+#--------------------------------------------------------------------------
 
 to.remove <- !info.to.use
 mcmc.correct.dim <- mcmc.correct.dim[!to.remove]
@@ -701,7 +703,7 @@ dev.off()
 
 
 
-# STEP 7: CREATE RESULT TIME SERIES AND DATA EXAMPLE FIGURES
+# STEP 9: CREATE RESULT TIME SERIES AND DATA EXAMPLE FIGURES
 #---------------------------------------------------------------------------
 
 interval.times <- vector(length = num.intervals)
