@@ -153,7 +153,7 @@ big.out <- foreach(a = 1:num.intervals) %dopar% {
   
   # Check for NA y values
   if (any(is.na(y))){ 
-    q.hat[] <- q.hat.lower[] <- q.hat.upper[] <- zs[] <- "no info"
+    q.hat[] <- q.hat.lower[] <- q.hat.upper[] <- zs[] <- "NA y"
     
   } else {
     
