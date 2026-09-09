@@ -6,8 +6,7 @@ run.mdlq.mcmc <- function(y, X, # response vector and covariate matrix
                           n.samples, n.burn.in = round(n.samples / 4, 0), # number of iterations to run the sampler and amount to burn in
                           plot.trace = F) { # flag to plot traces
   
-  library(MASS)
-  library(tmvtnorm)
+  library(Matrix)
   library(TruncatedNormal)
   library(R.utils)
   
@@ -49,6 +48,10 @@ run.mdlq.mcmc <- function(y, X, # response vector and covariate matrix
         ),
         silent = TRUE
       )
+      
+      if (!inherits(res, "try-error")) {
+        res <- matrix(res, nrow = d, ncol = n)
+      }
       
       if (!inherits(res, "try-error") && is.matrix(res)) {
         if (nrow(res) == d && ncol(res) == n && all(is.finite(res))) return(res)
