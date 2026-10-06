@@ -27,7 +27,7 @@ if (commandArgs()[1] == "RStudio"){
 
 # Analyze the sample week where concentration data are available (T),
 # or analyze the entire experiment (F)
-run.sample <- F
+run.sample <- T
 
 # Size of the inversion window used to run the MDLQ
 interval.length <- 30
